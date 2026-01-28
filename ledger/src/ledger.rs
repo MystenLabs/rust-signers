@@ -106,9 +106,7 @@ pub async fn get_public_key(
 
     let response = PublicKeyResponse {
         key_id: derivation_path.to_string(),
-        public_key: PublicKey {
-            ed25519: public_key_b64,
-        },
+        public_key: PublicKey::Ed25519(public_key_b64),
         sui_address: sui_address.to_string(),
     };
 

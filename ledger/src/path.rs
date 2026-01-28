@@ -82,7 +82,7 @@ pub fn split_path(path: &str) -> AppResult<Vec<u32>> {
     Ok(result)
 }
 
-pub fn get_dervation_path(index: u32) -> String {
+pub fn get_derivation_path(index: u32) -> String {
     // 44'/784'/0'/0'/0'
     format!("m/44'/784'/0'/0'/{index}'")
 }

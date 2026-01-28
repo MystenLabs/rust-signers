@@ -4,7 +4,7 @@ Warning these tests require a running emulator or ledger device.
 use base64::{Engine as _, engine::general_purpose};
 use ledger_signer::{
     ledger::{get_public_key, get_tcp_connection, sign_transaction},
-    utils::get_dervation_path,
+    path::get_derivation_path,
 };
 
 mod ledger_manager;
@@ -29,7 +29,7 @@ async fn test_get_public_key() {
     let _mgr = LedgerManager::acquire().await;
 
     let mut connection = get_tcp_connection(9999).await.unwrap();
-    let derivation_path = get_dervation_path(0);
+    let derivation_path = get_derivation_path(0);
     let public_key = get_public_key(&derivation_path, &mut connection.0).await;
     assert!(
         public_key.is_ok(),
@@ -44,14 +44,14 @@ async fn test_sign_transaction() {
 
     mgr.enable_blind_signing().await.unwrap();
 
-    let connection = get_tcp_connection(9999).await.unwrap();
-    let derivation_path = get_dervation_path(0);
+    let mut connection = get_tcp_connection(9999).await.unwrap();
+    let derivation_path = get_derivation_path(0);
 
     let message = "message";
     let message = general_purpose::STANDARD.encode(message);
 
     let (signature_result, ledger_mgr_result) = tokio::join!(
-        sign_transaction(derivation_path, &message, connection),
+        sign_transaction(derivation_path, &message, &mut connection),
         async {
             tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
             mgr.accept_transaction().await

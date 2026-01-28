@@ -3166,6 +3166,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "signer-types",
  "sui-sdk-types 0.0.6",
  "tokio",
 ]
@@ -5502,6 +5503,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "signer-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "simd-adler32"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7333,6 +7342,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "shared-crypto",
+ "signer-types",
  "sui-types",
  "tracing",
  "yubikey",

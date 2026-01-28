@@ -6,12 +6,12 @@ use std::io::Cursor;
 
 mod ledger_manager;
 use ledger_manager::LedgerManager;
-use ledger_signer::{ledger, utils};
+use ledger_signer::{ledger, path::get_derivation_path};
 
 // first key in the hardcoded seed "abandon abandon abandon ..." given to the speculos emulator
 fn first_key() -> serde_json::Value {
     json![{
-        "key_id": utils::get_dervation_path(0),
+        "key_id": get_derivation_path(0),
         "public_key": {
             "Ed25519": "kAtNge7Oo98vdLFCAMT0zz9Jr6ynpjT/0s9v+Cva7PI="
         },
@@ -47,7 +47,7 @@ async fn test_cli_keys() {
 
     assert_eq!(
         json![{
-        "key_id": utils::get_dervation_path(0),
+        "key_id": get_derivation_path(0),
         "public_key": {
             "Ed25519": "kAtNge7Oo98vdLFCAMT0zz9Jr6ynpjT/0s9v+Cva7PI="
         },
@@ -69,7 +69,7 @@ async fn test_cli_sign() {
 
     let input = Cursor::new(format!(
         r#"{{"jsonrpc":"2.0","method":"sign","params":{{"key_id":"{}","msg":"{}"}}, "id":1}}"#,
-        utils::get_dervation_path(0),
+        get_derivation_path(0),
         message
     ));
     let connection_type = ledger::ConnectionType::Tcp(9999);
@@ -89,7 +89,7 @@ async fn test_cli_get_public_key() {
     let _mgr = LedgerManager::acquire().await;
     let input = Cursor::new(format!(
         r#"{{"jsonrpc":"2.0","method":"public_key","params":{{"key_id":"{}"}}, "id":1}}"#,
-        utils::get_dervation_path(0),
+        get_derivation_path(0),
     ));
 
     let connection_type = ledger::ConnectionType::Tcp(9999);

@@ -1,5 +1,5 @@
 use crate::ledger;
-use crate::path::get_dervation_path;
+use crate::path::get_derivation_path;
 use crate::types::*;
 use anyhow::{Context, anyhow};
 use serde_json::{Value, json};
@@ -106,7 +106,7 @@ pub async fn handle_request(
 
             let mut keys = vec![];
             for i in 0..10 {
-                let derivation_path = get_dervation_path(i);
+                let derivation_path = get_derivation_path(i);
 
                 keys.push(ledger::get_public_key(&derivation_path, &mut ledger_conn.0).await?)
             }

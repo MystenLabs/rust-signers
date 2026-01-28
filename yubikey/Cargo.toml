@@ -19,6 +19,7 @@ zeroize = "1.8.2"
 serde_json = "1.0.149"
 serde = "1.0.228"
 mockall = "0.14.0"
+signer-types = { path = "../types" }
 
 [dev-dependencies]
 mockall = "0.14.0"

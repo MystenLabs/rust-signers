@@ -1,4 +1,5 @@
 use super::{DeviceMetadata, GeneratedKeyInfo, SmartCard};
+
 use crate::types::*;
 use anyhow::{anyhow, Error};
 use fastcrypto::encoding::{Base64, Encoding, Hex};
@@ -163,14 +164,17 @@ impl YubiKeyHandler {
 
         Ok(PublicKeyResponse {
             key_id,
-            public_key: PublicKey {
-                secp256r1: public_key_b64,
-            },
+            public_key: PublicKey::Secp256r1(public_key_b64),
             sui_address: format!("0x{}", Hex::encode(sui_address)),
         })
     }
 
-    pub fn sign_transaction(&mut self, slot: SlotId, data: &str, pin: &str) -> Result<String, Error> {
+    pub fn sign_transaction(
+        &mut self,
+        slot: SlotId,
+        data: &str,
+        pin: &str,
+    ) -> Result<String, Error> {
         let algorithm = AlgorithmId::EccP256;
 
         // Check if key exists (implicitly by getting metadata)
