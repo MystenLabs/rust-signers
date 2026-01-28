@@ -53,6 +53,9 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
       - name: Build
         run: cargo build --release --workspace --target ${{ matrix.target }}
 
