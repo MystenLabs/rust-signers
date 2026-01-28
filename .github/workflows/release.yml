@@ -23,7 +23,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            suffix: linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: windows-x86_64
+            ext: .exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            suffix: macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            suffix: macos-arm64
 
     steps:
       - name: Checkout code
@@ -37,32 +50,24 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release --workspace
+        run: cargo build --release --workspace --target ${{ matrix.target }}
 
       - name: Package Binaries
         shell: bash
         run: |
           mkdir release_assets
-          ARCH=$(uname -m)
-          EXT=""
 
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            OS="linux"
-          elif [ "${{ runner.os }}" = "macOS" ]; then
-            OS="macos"
-          elif [ "${{ runner.os }}" = "Windows" ]; then
-            OS="windows"
-            EXT=".exe"
-          else
-            OS="unknown"
-          fi
+          # Handle extension from matrix
+          EXT="${{ matrix.ext }}"
+          SUFFIX="${{ matrix.suffix }}"
+          TARGET="${{ matrix.target }}"
 
-          SUFFIX="${OS}-${ARCH}"
-
-          cp target/release/ledger-signer${EXT} release_assets/ledger-signer-${SUFFIX}${EXT}
-          cp target/release/yubikey-signer${EXT} release_assets/yubikey-signer-${SUFFIX}${EXT}
+          cp target/$TARGET/release/ledger-signer$EXT release_assets/ledger-signer-$SUFFIX$EXT
+          cp target/$TARGET/release/yubikey-signer$EXT release_assets/yubikey-signer-$SUFFIX$EXT
 
       - name: Release
         uses: softprops/action-gh-release@v2
