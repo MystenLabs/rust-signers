@@ -7287,26 +7287,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yubigen"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bcs",
- "clap",
- "fastcrypto 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "mockall",
- "p256",
- "serde",
- "serde_json",
- "serial_test",
- "shared-crypto",
- "sui-types",
- "tracing",
- "yubikey",
- "zeroize",
-]
-
-[[package]]
 name = "yubikey"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7336,6 +7316,26 @@ dependencies = [
  "subtle",
  "uuid",
  "x509-cert",
+ "zeroize",
+]
+
+[[package]]
+name = "yubikey-signer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bcs",
+ "clap",
+ "fastcrypto 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockall",
+ "p256",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "shared-crypto",
+ "sui-types",
+ "tracing",
+ "yubikey",
  "zeroize",
 ]
 
