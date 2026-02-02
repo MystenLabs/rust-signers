@@ -1,29 +1,19 @@
-# Yubigen Signer
-
-EXPERIMENTAL use at own risk.
+# Yubikey Signer
 
 ## Install the Signer
 
-Add this repo to your local `PATH`.
+Add this repo to your local `PATH` and cargo install or optionally install from releases.
 
 ```bash
-git clone -b modular-signer git@github.com:MystenLabs/yubigen.git
-cd yubigen
-cargo install --path .
+git clone git@github.com:MystenLabs/rust-signer.git
+cd rust-signers
+cargo install --path yubikey
 ```
 
-## Install the CLI Branch
-
-Install the `external-keys-cli-support` branch of the Sui CLI to use the external keys feature.
-
-```bash
-suiup install --nightly external-keys-cli-support sui
-```
-
-## Yubigen CLI Commands
+## Yubikey CLI Commands
 
 ```
-Usage: yubigen <COMMAND>
+Usage: yubikey-signer <COMMAND>
 
 Commands:
   generate-key  Generate Key by default on RetiredSlot13, use --slot-id to choose retired slot 1-20
@@ -39,28 +29,30 @@ Options:
 
 `cargo run sign --data "<Base64 TX Bytes"` -> Must Generate key before on R13 Slot
 
-## Add A Key (Example from Ledger Signer - Adapt for Yubigen)
+## Add A Key to Sui CLI
 
-First ensure your YubiKey is connected.
+First ensure your YubiKey is connected, and you have generated a key on it using the `generate-key` command.
+
+Then run:
 
 ```bash
-sui external-keys list-keys yubigen
-# ... output similar to:
+sui external-keys list-keys yubikey-signer
 # ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 # │ keyId     │ ...                                                                                          │
 # │ suiAddress│ 0x...                                                                                        │
 # ...
 
-sui external-keys add-existing "key-id-or-path" yubigen
+sui external-keys add-existing "key-id-or-path" yubikey-signer
 # OR
-sui external-keys generate yubigen
+# This will attempt to use the first available retired slot, however it is not always possible to detect which slots are in use.
+sui external-keys generate yubikey-signer
 ```
 
 ## Use the Key
 
-Set your new key as active
+Set your new key as active, then perform a sign operation:
 
 ```bash
-sui client swap --address <YOUR_SUI_ADDRESS>
+sui client switch --address [sui-address]
 sui client transfer --object-id [object-id] --to [to address]
 ```
