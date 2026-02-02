@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  check:
+    name: Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libpcsclite-dev libudev-dev libdbus-1-dev libusb-1.0-0-dev pkg-config
+          version: 1.0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cargo Check
+        run: cargo check --workspace --all-targets --all-features
+
+      #- name: License Check
+      #  run: |
+      #    chmod +x ./scripts/license_check.sh
+      #    ./scripts/license_check.sh
+
+      - name: Start Emulator
+        run: |
+          chmod +x ledger/emulator.sh
+          cd ledger
+          ./emulator.sh background
+          sleep 10
+
+      - name: Run Tests
+        run: |
+          export RUST_TEST_THREADS=1
+          cargo test --workspace --all-features
+
+      - name: Stop Emulator
+        if: always()
+        run: |
+          cd ledger
+          ./emulator.sh stop
