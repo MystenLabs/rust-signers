@@ -67,14 +67,14 @@ pub async fn run_cli<R: BufRead>(
         return Err((anyhow::anyhow!("Method is required"), id));
     }
 
-    Ok(serde_json::to_value(JsonRpcResponse {
+    serde_json::to_value(JsonRpcResponse {
         jsonrpc: "2.0".to_string(),
         result: handle_request(&method, params, ledger_conn_type)
             .await
             .map_err(|e| (e, id))?,
         id,
     })
-    .map_err(|e| (anyhow::anyhow!("Failed to serialize response: {}", e), id))?)
+    .map_err(|e| (anyhow::anyhow!("Failed to serialize response: {}", e), id))
 }
 
 pub async fn handle_request(

@@ -1,2 +1,9 @@
-/target
-/.idea
+**/.history/
+**/.vscode/
+**/.idea/
+
+
+# OSX
+.DS_Store
+
+**/target

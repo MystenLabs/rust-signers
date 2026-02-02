@@ -71,10 +71,7 @@ pub struct GenKeyArgs {
 
 pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), Box<dyn std::error::Error>> {
     // Determine verbosity based on command
-    let verbose = match &cli.command {
-        Commands::Call => false,
-        _ => true,
-    };
+    let verbose = !matches!(&cli.command, Commands::Call);
 
     let mut handler = YubiKeyHandler::new_with_device(device, verbose);
 
@@ -119,20 +116,16 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), Box<dyn std::
             process_call_command(&mut handler, buf_reader)
         }
         Commands::Slot(slot_args) => {
-            let slot_id = match slot_args
-                .slot
-                .as_ref()
-                .and_then(|s| s.parse::<u32>().ok())
-            {
+            let slot_id = match slot_args.slot.as_ref().and_then(|s| s.parse::<u32>().ok()) {
                 Some(input) => {
                     from_slot_input(input).ok_or_else(|| anyhow!("Invalid slot number"))?
                 }
                 None => RetiredSlotId::R13, // Default to R13 if no slot is provided
             };
             let slot: SlotId = SlotId::Retired(slot_id);
-            let response = handler.metadata(slot).map_err(|e| {
-                anyhow!("Failed to get slot metadata: {}", e)
-            })?;
+            let response = handler
+                .metadata(slot)
+                .map_err(|e| anyhow!("Failed to get slot metadata: {}", e))?;
             println!("Slot: {:?}", response);
             Ok(())
         }

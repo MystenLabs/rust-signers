@@ -90,16 +90,13 @@ impl YubiKeyHandler {
     ) -> Result<(), Error> {
         let algorithm = AlgorithmId::EccP256;
 
-        let _ = self
-            .device
-            .authenticate(mgmt_key.unwrap_or_else(MgmKey::default))?;
+        self.device.authenticate(mgmt_key.unwrap_or_default())?;
         let existing_data = self.device.metadata(slot).ok();
         if existing_data.is_some() && !force {
             return Err(anyhow!(
                 "Key already exists in the specified slot {}. Use --force to overwrite.",
                 slot
-            )
-            .into());
+            ));
         }
         if self.verbose {
             println!("Generating Key on {:?}", slot);
@@ -186,7 +183,7 @@ impl YubiKeyHandler {
         let pk_bytes = binding.as_bytes();
 
         let msg: TransactionData = bcs::from_bytes(
-            &Base64::decode(&data)
+            &Base64::decode(data)
                 .map_err(|e| anyhow!("Cannot deserialize data as TransactionData {:?}", e))?,
         )?;
         let intent_msg = IntentMessage::new(Intent::sui_transaction(), msg);
@@ -198,7 +195,7 @@ impl YubiKeyHandler {
         hasher2.update(digest);
         let sha_digest = hasher2.finalize().digest;
 
-        let _ = self.device.verify_pin(pin.as_bytes())?;
+        self.device.verify_pin(pin.as_bytes())?;
 
         if self.verbose {
             eprintln!("[*] Please touch your yubikey....");

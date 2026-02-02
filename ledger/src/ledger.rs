@@ -34,7 +34,7 @@ pub async fn get_connection(
     let devices = provider.list(Filters::Any).await?;
 
     if devices.is_empty() {
-        return Err(AppError::DeviceNotFound.into());
+        return Err(AppError::DeviceNotFound);
     }
 
     let hardware_device_info = devices[0].clone(); // Store hardware info
@@ -77,7 +77,7 @@ pub async fn get_public_key(
 
     if response_data.is_empty() {
         return Err(
-            AppError::PublicKeyFailed("Empty response from Ledger device".to_string()).into(),
+            AppError::PublicKeyFailed("Empty response from Ledger device".to_string()),
         );
     }
 
@@ -86,7 +86,7 @@ pub async fn get_public_key(
 
     if response_data.len() < 1 + key_size {
         return Err(
-            AppError::PublicKeyFailed("Invalid response from Ledger device".to_string()).into(),
+            AppError::PublicKeyFailed("Invalid response from Ledger device".to_string()),
         );
     }
 
@@ -138,8 +138,7 @@ pub async fn sign_transaction(
     if pub_key_response.is_empty() {
         return Err(AppError::PublicKeyFailed(
             "Empty public key response from Ledger device".to_string(),
-        )
-        .into());
+        ));
     }
 
     // Parse Sui response format: [key_size][public_key][address_size][address]
@@ -147,8 +146,7 @@ pub async fn sign_transaction(
     if pub_key_response.len() < 1 + key_size || key_size != 32 {
         return Err(AppError::PublicKeyFailed(
             "Invalid public key response from Ledger device".to_string(),
-        )
-        .into());
+        ));
     }
 
     // let public_key_bytes = &pub_key_response[1..1 + key_size];
@@ -177,13 +175,13 @@ pub async fn sign_transaction(
         Ok(data) => data,
         Err(e) => {
             if e.to_string().contains("timeout") || e.to_string().contains("Timeout") {
-                return Err(AppError::DeviceTimeout.into());
+                return Err(AppError::DeviceTimeout);
             } else if e.to_string().contains("6985") {
-                return Err(AppError::UserRejected.into());
+                return Err(AppError::UserRejected);
             } else {
-                return Err(
-                    AppError::SignatureFailed(format!("Transaction signing failed: {e}")).into(),
-                );
+                return Err(AppError::SignatureFailed(format!(
+                    "Transaction signing failed: {e}"
+                )));
             }
         }
     };
@@ -192,8 +190,7 @@ pub async fn sign_transaction(
     if pub_key_for_sig.is_empty() {
         return Err(AppError::PublicKeyFailed(
             "Empty public key response for signature assembly".to_string(),
-        )
-        .into());
+        ));
     }
 
     // Parse public key from response
@@ -201,8 +198,7 @@ pub async fn sign_transaction(
     if pub_key_for_sig.len() < 1 + key_size || key_size != 32 {
         return Err(AppError::PublicKeyFailed(
             "Invalid public key response for signature assembly".to_string(),
-        )
-        .into());
+        ));
     }
 
     let public_key_for_sig = &pub_key_for_sig[1..1 + key_size];
