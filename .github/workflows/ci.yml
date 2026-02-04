@@ -3,8 +3,6 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
 
 jobs:
   check:
@@ -34,20 +32,14 @@ jobs:
       #    chmod +x ./scripts/license_check.sh
       #    ./scripts/license_check.sh
 
-      - name: Start Emulator
+      - name: Run Tests
         run: |
           chmod +x ledger/emulator.sh
           cd ledger
           ./emulator.sh background
           sleep 10
 
-      - name: Run Tests
-        run: |
           export RUST_TEST_THREADS=1
           cargo test --workspace --all-features
 
-      - name: Stop Emulator
-        if: always()
-        run: |
-          cd ledger
           ./emulator.sh stop

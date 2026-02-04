@@ -24,8 +24,10 @@ start_emulator() {
     fi
 
     # pull image
+    echo "Pulling image..."
     $CONTAINER_CMD pull ghcr.io/ledgerhq/speculos
 
+    echo "Starting emulator..."
     $CONTAINER_CMD run --rm $flags \
         --name "$CONTAINER_NAME" \
         -v "$PWD/apps:/speculos/apps" \

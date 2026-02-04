@@ -55,4 +55,5 @@ Set your new key as active, then perform a sign operation:
 ```bash
 sui client switch --address [sui-address]
 sui client transfer --object-id [object-id] --to [to address]
+# Touch your YubiKey to confirm
 ```
