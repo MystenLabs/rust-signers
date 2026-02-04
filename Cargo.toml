@@ -4,5 +4,4 @@ members = [
     "ledger",
     "yubikey",
     "types",
-    "aws",
 ]
