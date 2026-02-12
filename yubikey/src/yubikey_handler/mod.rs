@@ -65,14 +65,39 @@ pub fn from_slot_input(input: u32) -> Option<RetiredSlotId> {
     }
 }
 
-pub fn resolve_pin(explicit_pin: Option<String>) -> String {
+pub fn resolve_pin(explicit_pin: Option<String>) -> Result<String, Error> {
     if let Some(p) = explicit_pin {
-        return p;
+        return Ok(p);
     }
     if let Ok(p) = env::var("YUBIKEY_PIN") {
-        return p;
+        return Ok(p);
     }
-    "123456".to_string()
+
+    if !cfg!(test) && env::var("YUBIKEY_DISABLE_INTERACTIVE").is_err() {
+        // List of GUI pinentry binaries to try in order
+        let gui_binaries = [
+            "pinentry-mac",    // macOS
+            "pinentry-gnome3", // Linux GNOME
+            "pinentry-qt",     // Linux Qt
+            "pinentry-x11",    // Linux X11 fallback
+        ];
+
+        for binary in gui_binaries {
+            if let Some(mut input) = pinentry::PassphraseInput::with_binary(binary) {
+                use secrecy::ExposeSecret;
+                let password = input
+                    .with_description("Enter YubiKey PIN")
+                    .with_prompt("PIN:")
+                    .interact();
+
+                if let Ok(password) = password {
+                    return Ok(password.expose_secret().to_string());
+                }
+            }
+        }
+    }
+
+    Ok("123456".to_string())
 }
 
 #[cfg(test)]
@@ -97,7 +122,7 @@ pub mod tests {
     #[serial]
     fn test_resolve_pin_explicit() {
         reset_env();
-        let pin = resolve_pin(Some("123456".to_string()));
+        let pin = resolve_pin(Some("123456".to_string())).unwrap();
         assert_eq!(pin, "123456");
     }
 
@@ -106,7 +131,7 @@ pub mod tests {
     fn test_resolve_pin_env() {
         reset_env();
         env::set_var("YUBIKEY_PIN", "env_pin");
-        let pin = resolve_pin(None);
+        let pin = resolve_pin(None).unwrap();
         assert_eq!(pin, "env_pin");
     }
 
@@ -115,7 +140,7 @@ pub mod tests {
     fn test_resolve_pin_priority() {
         reset_env();
         env::set_var("YUBIKEY_PIN", "env_pin");
-        let pin = resolve_pin(Some("explicit_pin".to_string()));
+        let pin = resolve_pin(Some("explicit_pin".to_string())).unwrap();
         assert_eq!(pin, "explicit_pin");
     }
 
@@ -134,7 +159,7 @@ pub mod tests {
     #[serial]
     fn test_resolve_pin_default() {
         reset_env();
-        let pin = resolve_pin(None);
+        let pin = resolve_pin(None).unwrap();
         assert_eq!(pin, "123456");
     }
 

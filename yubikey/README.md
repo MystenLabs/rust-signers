@@ -59,7 +59,7 @@ sui client transfer --object-id [object-id] --to [to address]
 ```
 
 ## Using a non-default pin
-By default, the signer will attempt to use the default pin for YubiKeys, which is "123456". If you have changed the pin on your YubiKey, you can set the `YUBIKEY_PIN` environment variable to the new pin before running the signer commands.
+By default, the signer will attempt to use pinentry to prompt for the pin, then fallback to the default pin for YubiKeys, which is "123456". Optionally, you can also set the `YUBIKEY_PIN` environment variable to the pin you have set on your YubiKey.
 ```bash
 YUBIKEY_PIN="your-pin-here" [sui command]
 ```

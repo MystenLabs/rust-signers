@@ -106,7 +106,7 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), Box<dyn std::
             };
             let slot: SlotId = SlotId::Retired(slot_id);
 
-            let pin = resolve_pin(sign_args.pin.clone());
+            let pin = resolve_pin(sign_args.pin.clone())?;
             let _ = handler.sign_transaction(slot, data, &pin);
             Ok(())
         }
@@ -205,7 +205,7 @@ fn handle_request(
                 .unwrap_or(RetiredSlotId::R13);
             let slot = SlotId::Retired(slot_id);
 
-            let pin = resolve_pin(None);
+            let pin = resolve_pin(None)?;
             let signature = handler.sign_transaction(slot, &args.msg, &pin)?;
 
             Ok(serde_json::to_value(SignatureResponse { signature })?)
