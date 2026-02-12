@@ -1,4 +1,5 @@
 # Yubikey Signer
+EXPERIMENTAL: This is an experimental implementation of a Yubikey signer for Sui. It is not yet ready for production use
 
 ## Install the Signer
 
@@ -51,9 +52,14 @@ sui external-keys generate yubikey-signer
 ## Use the Key
 
 Set your new key as active, then perform a sign operation:
-
 ```bash
 sui client switch --address [sui-address]
 sui client transfer --object-id [object-id] --to [to address]
 # Touch your YubiKey to confirm
+```
+
+## Using a non-default pin
+By default, the signer will attempt to use the default pin for YubiKeys, which is "123456". If you have changed the pin on your YubiKey, you can set the `YUBIKEY_PIN` environment variable to the new pin before running the signer commands.
+```bash
+YUBIKEY_PIN="your-pin-here" [sui command]
 ```

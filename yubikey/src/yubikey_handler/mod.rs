@@ -69,7 +69,7 @@ pub fn resolve_pin(explicit_pin: Option<String>) -> String {
     if let Some(p) = explicit_pin {
         return p;
     }
-    if let Ok(p) = env::var("YUBIGEN_PIN") {
+    if let Ok(p) = env::var("YUBIKEY_PIN") {
         return p;
     }
     "123456".to_string()
@@ -90,7 +90,7 @@ pub mod tests {
 
     // Helper to reset env var
     fn reset_env() {
-        env::remove_var("YUBIGEN_PIN");
+        env::remove_var("YUBIKEY_PIN");
     }
 
     #[test]
@@ -105,7 +105,7 @@ pub mod tests {
     #[serial]
     fn test_resolve_pin_env() {
         reset_env();
-        env::set_var("YUBIGEN_PIN", "env_pin");
+        env::set_var("YUBIKEY_PIN", "env_pin");
         let pin = resolve_pin(None);
         assert_eq!(pin, "env_pin");
     }
@@ -114,7 +114,7 @@ pub mod tests {
     #[serial]
     fn test_resolve_pin_priority() {
         reset_env();
-        env::set_var("YUBIGEN_PIN", "env_pin");
+        env::set_var("YUBIKEY_PIN", "env_pin");
         let pin = resolve_pin(Some("explicit_pin".to_string()));
         assert_eq!(pin, "explicit_pin");
     }
