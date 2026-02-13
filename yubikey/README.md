@@ -18,11 +18,12 @@ cargo install --path yubikey
 Usage: yubikey-signer <COMMAND>
 
 Commands:
-  generate-key  Generate Key by default on RetiredSlot1, use --slot-id to choose retired slot 1-20
+  generate-key  Generate Key. Defaults to Retired Slot 1. Use --slot to choose a specific Retired Slot (1-20).
   import        Import a key from a mnemonic phrase
   sign          Sign a transaction digest
   call          JSON-RPC mode for integration with Sui CLI (reads from stdin)
   address       Prints the Sui Address for the key in the given slot (default R1)
+  slot          Prints slot information
   help          Print this message or the help of the given subcommand(s)
 
 Options:
@@ -65,13 +66,7 @@ sui client transfer --object-id [object-id] --to [to address]
 
 You can import a key from a standard 12 or 24 word mnemonic phrase. This supports standard BIP-32 derivation paths.
 
-**Basic Import (Defaults to Retired Slot 1):**
-
-```bash
-yubikey-signer import --words "word1 word2 ... word12"
-```
-
-**Advanced Import:**
+**Import**
 
 You can specify the specific slot, force overwrite, and set security policies.
 

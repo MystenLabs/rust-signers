@@ -212,9 +212,20 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
         Commands::Slot(slot_args) => {
             let slot = parse_slot(&slot_args.slot)?;
             let response = handler
-                .metadata(slot)
-                .map_err(|e| anyhow!("Failed to get slot metadata: {}", e))?;
-            println!("Slot: {:?}", response);
+                .get_public_key(slot)
+                .map_err(|e| anyhow!("Failed to get slot info: {}", e))?;
+            println!("Public Key Information:");
+            println!("  Sui Address: {}", response.sui_address);
+            match response.public_key {
+                crate::types::PublicKey::Secp256r1(key) => {
+                    println!("  Public Key (Base64): {}", key);
+                    println!("  Key Scheme: Secp256r1");
+                }
+                crate::types::PublicKey::Ed25519(key) => {
+                    println!("  Public Key (Base64): {}", key);
+                    println!("  Key Scheme: Ed25519");
+                }
+            }
             Ok(())
         }
         Commands::Address(address_args) => {
@@ -275,12 +286,7 @@ fn handle_request(
         "sign" => {
             let args: SignParams =
                 serde_json::from_value(params).context("Failed to deserialize sign params")?;
-            let slot_id = from_slot_input(
-                args.key_id
-                    .parse()
-                    .map_err(|_| error::Error::InvalidSlotNumber)?,
-            )?;
-            let slot = SlotId::Retired(slot_id);
+            let slot = parse_slot(&args.key_id)?;
 
             let pin = resolve_pin(None)?;
             let signature = handler.sign_transaction(slot, &args.msg, &pin)?;
@@ -302,12 +308,7 @@ fn handle_request(
         "public_key" => {
             let args: PublicKeyParams = serde_json::from_value(params)
                 .context("Failed to deserialize public_key params")?;
-            let slot_id = from_slot_input(
-                args.key_id
-                    .parse()
-                    .map_err(|_| error::Error::InvalidSlotNumber)?,
-            )?;
-            let slot = SlotId::Retired(slot_id);
+            let slot = parse_slot(&args.key_id)?;
             Ok(serde_json::to_value(handler.get_public_key(slot)?)?)
         }
         "create_key" => {
