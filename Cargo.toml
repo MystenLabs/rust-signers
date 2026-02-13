@@ -5,3 +5,35 @@ members = [
     "yubikey",
     "types",
 ]
+
+[workspace.dependencies]
+anyhow = "1"
+bcs = "0.1.6"
+bip32 = "0.5.3"
+clap = { version = "4.4", features = ["derive"] }
+fastcrypto = "0.1.9"
+hmac = "0.12.1"
+p256 = "0.13.2"
+pem-rfc7468 = "1.0.0"
+pinentry = "0.8.0"
+secrecy = "0.10.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10.9"
+shared-crypto = { git = "https://github.com/MystenLabs/sui", branch = "main" }
+signer-types = { path = "types" }
+slip10_ed25519 = "0.1.3"
+sui-keys = { git = "https://github.com/MystenLabs/sui", branch = "main" }
+sui-sdk-types = { version = "0.0.6", features = ["hash", "serde"] }
+sui-types = { git = "https://github.com/MystenLabs/sui", branch = "main" }
+thiserror = "2.0"
+tiny-bip39 = "1.0.0"
+tracing = "0.1.44"
+yubikey = { version = "0.8.0", features = ["untested"] }
+zeroize = "1.8.2"
+x509-cert = "0.2.5"
+der = "0.7.10"
+spki = "0.7.3"
+mockall = "0.14.0"
+serial_test = "3.3.1"
+tc = { version = "0.1.0" } # Assumed if needed later, but not present currently

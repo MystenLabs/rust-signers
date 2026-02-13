@@ -1,4 +1,4 @@
-use anyhow::Error;
+use crate::error::Error;
 pub use device::YubiKeyHandler;
 use mockall::automock;
 use std::env;
@@ -37,31 +37,38 @@ pub trait SmartCard {
         slot: SlotId,
     ) -> Result<Vec<u8>, Error>;
     fn verify_pin(&mut self, pin: &[u8]) -> Result<(), Error>;
+    fn import_key(
+        &mut self,
+        slot: SlotId,
+        key_data: &[u8],
+        pin_policy: PinPolicy,
+        touch_policy: TouchPolicy,
+    ) -> Result<GeneratedKeyInfo, Error>;
 }
 
-pub fn from_slot_input(input: u32) -> Option<RetiredSlotId> {
+pub fn from_slot_input(input: u32) -> Result<RetiredSlotId, Error> {
     match input {
-        1 => Some(RetiredSlotId::R1),
-        2 => Some(RetiredSlotId::R2),
-        3 => Some(RetiredSlotId::R3),
-        4 => Some(RetiredSlotId::R4),
-        5 => Some(RetiredSlotId::R5),
-        6 => Some(RetiredSlotId::R6),
-        7 => Some(RetiredSlotId::R7),
-        8 => Some(RetiredSlotId::R8),
-        9 => Some(RetiredSlotId::R9),
-        10 => Some(RetiredSlotId::R10),
-        11 => Some(RetiredSlotId::R11),
-        12 => Some(RetiredSlotId::R12),
-        13 => Some(RetiredSlotId::R13),
-        14 => Some(RetiredSlotId::R14),
-        15 => Some(RetiredSlotId::R15),
-        16 => Some(RetiredSlotId::R16),
-        17 => Some(RetiredSlotId::R17),
-        18 => Some(RetiredSlotId::R18),
-        19 => Some(RetiredSlotId::R19),
-        20 => Some(RetiredSlotId::R20),
-        _ => None, // Return None for invalid inputs
+        1 => Ok(RetiredSlotId::R1),
+        2 => Ok(RetiredSlotId::R2),
+        3 => Ok(RetiredSlotId::R3),
+        4 => Ok(RetiredSlotId::R4),
+        5 => Ok(RetiredSlotId::R5),
+        6 => Ok(RetiredSlotId::R6),
+        7 => Ok(RetiredSlotId::R7),
+        8 => Ok(RetiredSlotId::R8),
+        9 => Ok(RetiredSlotId::R9),
+        10 => Ok(RetiredSlotId::R10),
+        11 => Ok(RetiredSlotId::R11),
+        12 => Ok(RetiredSlotId::R12),
+        13 => Ok(RetiredSlotId::R13),
+        14 => Ok(RetiredSlotId::R14),
+        15 => Ok(RetiredSlotId::R15),
+        16 => Ok(RetiredSlotId::R16),
+        17 => Ok(RetiredSlotId::R17),
+        18 => Ok(RetiredSlotId::R18),
+        19 => Ok(RetiredSlotId::R19),
+        20 => Ok(RetiredSlotId::R20),
+        _ => Err(Error::InvalidSlotNumber),
     }
 }
 
@@ -147,12 +154,18 @@ pub mod tests {
     #[test]
     fn test_from_slot_input() {
         // Test all valid inputs
-        assert_eq!(from_slot_input(1), Some(RetiredSlotId::R1));
-        assert_eq!(from_slot_input(20), Some(RetiredSlotId::R20));
+        assert_eq!(from_slot_input(1).unwrap(), RetiredSlotId::R1);
+        assert_eq!(from_slot_input(20).unwrap(), RetiredSlotId::R20);
 
         // Test invalid inputs
-        assert_eq!(from_slot_input(0), None);
-        assert_eq!(from_slot_input(21), None);
+        assert_eq!(
+            from_slot_input(0).unwrap_err(),
+            Error::InvalidSlotNumber
+        );
+        assert_eq!(
+            from_slot_input(21).unwrap_err(),
+            Error::InvalidSlotNumber
+        );
     }
 
     #[test]
@@ -185,7 +198,7 @@ pub mod tests {
         mock_device
             .expect_generate()
             .with(
-                eq(SlotId::Retired(RetiredSlotId::R13)),
+                eq(SlotId::Retired(RetiredSlotId::R1)),
                 eq(AlgorithmId::EccP256),
                 eq(PinPolicy::Once),     // Fixed: Implementation uses Once
                 eq(TouchPolicy::Always), // Fixed: Implementation uses Always
@@ -199,7 +212,7 @@ pub mod tests {
 
         mock_device
             .expect_metadata()
-            .with(eq(SlotId::Retired(RetiredSlotId::R13)))
+            .with(eq(SlotId::Retired(RetiredSlotId::R1)))
             .times(1)
             .returning(|_| {
                 Ok(DeviceMetadata {
@@ -211,7 +224,7 @@ pub mod tests {
         // Set force=true to avoid "Key already exists" error
         handler
             .generate_key(
-                SlotId::Retired(RetiredSlotId::R13),
+                SlotId::Retired(RetiredSlotId::R1),
                 Some(MgmKey::default()),
                 true,
             )
@@ -231,7 +244,7 @@ pub mod tests {
         // Expect metadata call (used for logging or checks)
         mock_device
             .expect_metadata()
-            .with(eq(SlotId::Retired(RetiredSlotId::R13)))
+            .with(eq(SlotId::Retired(RetiredSlotId::R1)))
             .returning(|_| {
                 Ok(DeviceMetadata {
                     public_key: VALID_PUBKEY.to_vec(), // Fixed: Valid P-256 key
@@ -269,7 +282,7 @@ pub mod tests {
             .with(
                 function(|digest: &[u8]| digest.len() == 32),
                 eq(AlgorithmId::EccP256),
-                eq(SlotId::Retired(RetiredSlotId::R13)),
+                eq(SlotId::Retired(RetiredSlotId::R1)),
             )
             .times(1)
             .returning(|_, _, _| {
@@ -288,7 +301,7 @@ pub mod tests {
         let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
 
         let signature = handler
-            .sign_transaction(SlotId::Retired(RetiredSlotId::R13), &tx_base64, "123456")
+            .sign_transaction(SlotId::Retired(RetiredSlotId::R1), &tx_base64, "123456")
             .unwrap();
 
         assert!(!signature.is_empty());

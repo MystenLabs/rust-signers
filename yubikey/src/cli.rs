@@ -1,14 +1,17 @@
+use crate::error;
 use crate::types::*;
 use crate::yubikey_handler::{from_slot_input, resolve_pin, SmartCard, YubiKeyHandler};
 use anyhow::{anyhow, Context};
 use clap::{Args, Parser, Subcommand};
 use serde_json::{json, Value};
 use std::io::{self, BufRead};
-use yubikey::piv::{RetiredSlotId, SlotId};
-use yubikey::MgmKey;
+
+use sui_types::crypto::{KeypairTraits as KeyPair, ToFromBytes};
+use yubikey::piv::SlotId;
+use yubikey::{MgmKey, PinPolicy, TouchPolicy};
 use zeroize::ZeroizeOnDrop;
 
-// Generates Secp256r1 key on Retired Slot 13(Default) - TouchPolicy cached
+// Generates Secp256r1 key on Retired Slot 1(Default) - TouchPolicy cached
 // Prints our corresponding address
 // Sign whatever base64 serialized tx data blindly
 // Prints out Sui Signature
@@ -23,13 +26,15 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Generate Key by default on RetiredSlot13, use --slot-id to choose retired slot 1-20
+    /// Generate Key. Defaults to Retired Slot 1. Use --slot to choose a specific Retired Slot (1-20).
     GenerateKey(GenKeyArgs),
+    /// Import key from mnemonic
+    Import(ImportArgs),
     /// Sign a transaction digest
     Sign(SignArgs),
     /// JSON-RPC mode for integration with Sui CLI (reads from stdin)
     Call,
-    /// Prints the Sui Address for the key in the given slot (default R13)
+    /// Prints the Sui Address for the key in the given slot (default R1)
     Address(AddressArgs),
     /// Prints slot information
     Slot(SlotArgs),
@@ -41,35 +46,74 @@ pub struct SignArgs {
     // The base64 encoded BCS TransactionData to be passed for signing
     pub data: String,
     #[clap(long, short = 'p')]
-    // Pin of your yubikey, uses default if not provided
+    // Pin of your yubikey, uses pinentry or default if not provided
     pub pin: Option<String>,
     #[clap(long, short = 's')]
-    pub slot: Option<String>,
+    pub slot: String,
 }
 
 #[derive(Args, Clone, ZeroizeOnDrop)]
 pub struct AddressArgs {
     #[clap(long, short = 's')]
-    pub slot: Option<String>,
+    pub slot: String,
 }
 
 #[derive(Args, Clone, ZeroizeOnDrop)]
 pub struct SlotArgs {
     #[clap(long, short = 's')]
-    pub slot: Option<String>,
+    pub slot: String,
+}
+
+#[derive(Args, Clone, ZeroizeOnDrop)]
+pub struct ImportArgs {
+    /// The mnemonic phrase (12-24 words)
+    #[clap(long, short = 'w')]
+    pub words: String,
+
+    /// The slot to import the key into (default: 1)
+    #[clap(long, short = 's')]
+    pub slot: String,
+
+    /// Force overwrite required if slot is occupied
+    #[clap(long, short = 'f')]
+    pub force: bool,
+
+    /// The PIN policy (default: once)
+    /// Possible values: never, once, always
+    #[clap(long)]
+    pub pin_policy: Option<String>,
+
+    /// The touch policy (default: always)
+    /// Possible values: never, always, cached
+    #[clap(long)]
+    pub touch_policy: Option<String>,
+
+    /// The key scheme (default: secp256r1)
+    /// Possible values: ed25519, secp256k1, secp256r1
+    #[clap(long, default_value = "secp256r1")]
+    pub key_scheme: String,
+
+    /// The derivation path (default depends on scheme)
+    #[clap(long)]
+    pub derivation_path: Option<String>,
+
+    /// The word length (default: word12)
+    /// Possible values: word12, word15, word18, word21, word24
+    #[clap(long, default_value = "word12")]
+    pub word_length: String,
 }
 
 #[derive(Args, Clone, ZeroizeOnDrop)]
 pub struct GenKeyArgs {
     #[clap(long, short = 's')]
-    pub slot: Option<String>,
+    pub slot: String,
     #[clap(long, short = 'm')]
     pub mgmt_key: Option<String>,
     #[clap(long, short = 'f')]
     pub force: bool,
 }
 
-pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
     // Determine verbosity based on command
     let verbose = !matches!(&cli.command, Commands::Call);
 
@@ -77,17 +121,8 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), Box<dyn std::
 
     match &cli.command {
         Commands::GenerateKey(gen_key_args) => {
-            let slot_id = match gen_key_args
-                .slot
-                .as_ref()
-                .and_then(|s| s.parse::<u32>().ok())
-            {
-                Some(input) => {
-                    from_slot_input(input).ok_or_else(|| anyhow!("Invalid slot number"))?
-                }
-                None => RetiredSlotId::R13, // Default to R13 if no slot is provided
-            };
-            let slot: SlotId = SlotId::Retired(slot_id);
+            let slot = parse_slot(&gen_key_args.slot)?;
+
             let m_key = match &gen_key_args.mgmt_key {
                 Some(m) => MgmKey::from_bytes(m.as_str()),
                 None => Ok(MgmKey::default()),
@@ -96,16 +131,75 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), Box<dyn std::
             handler.generate_key(slot, Some(m_key), gen_key_args.force)?;
             Ok(())
         }
+        Commands::Import(import_args) => {
+            let slot = parse_slot(&import_args.slot)?;
+
+            let key_scheme = import_args.key_scheme
+                .parse::<sui_types::crypto::SignatureScheme>()
+                .map_err(|_| anyhow!("Unsupported key scheme. YubiKey only supports [secp256r1, ed25519, secp256k1] (though import might fail on device for non-r1)"))?;
+
+            if key_scheme != sui_types::crypto::SignatureScheme::Secp256r1 {
+                return Err(anyhow!("YubiKey only supports secp256r1 key scheme"));
+            }
+
+            let derivation_path = import_args
+                .derivation_path
+                .as_deref()
+                .map(|s| {
+                    s.parse()
+                        .map_err(|e| anyhow!("Invalid derivation path: {:?}", e))
+                })
+                .transpose()?;
+
+            let mnemonic =
+                bip39::Mnemonic::from_phrase(&import_args.words, bip39::Language::English)
+                    .map_err(|e| anyhow!("Invalid mnemonic: {}", e))?;
+            let seed = bip39::Seed::new(&mnemonic, "");
+
+            // Path handling
+            let path = derivation_path;
+
+            let (_address, kp) =
+                sui_keys::key_derive::derive_key_pair_from_path(seed.as_bytes(), path, &key_scheme)
+                    .map_err(|e| anyhow!("Failed to derive key pair: {}", e))?;
+
+            let key = match kp {
+                sui_types::crypto::SuiKeyPair::Secp256r1(k) => {
+                    k.copy().private().as_bytes().to_vec()
+                }
+                _ => return Err(anyhow!("Unexpected key type derived")),
+            };
+
+            let pin_policy = match &import_args.pin_policy {
+                Some(p) => match p.to_lowercase().as_str() {
+                    "always" => PinPolicy::Always,
+                    "once" => PinPolicy::Once,
+                    "never" => PinPolicy::Never,
+                    _ => return Err(anyhow!("Invalid pin policy. Allowed: always, once, never")),
+                },
+                None => PinPolicy::Once,
+            };
+
+            let touch_policy = match &import_args.touch_policy {
+                Some(p) => match p.to_lowercase().as_str() {
+                    "always" => TouchPolicy::Always,
+                    "cached" => TouchPolicy::Cached,
+                    "never" => TouchPolicy::Never,
+                    _ => {
+                        return Err(anyhow!(
+                            "Invalid touch policy. Allowed: always, cached, never"
+                        ))
+                    }
+                },
+                None => TouchPolicy::Always,
+            };
+
+            handler.import_key(slot, &key, pin_policy, touch_policy, import_args.force)?;
+            Ok(())
+        }
         Commands::Sign(sign_args) => {
             let data = &sign_args.data;
-            let slot_id = match sign_args.slot.as_ref().and_then(|s| s.parse::<u32>().ok()) {
-                Some(input) => {
-                    from_slot_input(input).ok_or_else(|| anyhow!("Invalid slot number"))?
-                }
-                None => RetiredSlotId::R13, // Default to R13 if no slot is provided
-            };
-            let slot: SlotId = SlotId::Retired(slot_id);
-
+            let slot = parse_slot(&sign_args.slot)?;
             let pin = resolve_pin(sign_args.pin.clone())?;
             let _ = handler.sign_transaction(slot, data, &pin);
             Ok(())
@@ -116,13 +210,7 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), Box<dyn std::
             process_call_command(&mut handler, buf_reader)
         }
         Commands::Slot(slot_args) => {
-            let slot_id = match slot_args.slot.as_ref().and_then(|s| s.parse::<u32>().ok()) {
-                Some(input) => {
-                    from_slot_input(input).ok_or_else(|| anyhow!("Invalid slot number"))?
-                }
-                None => RetiredSlotId::R13, // Default to R13 if no slot is provided
-            };
-            let slot: SlotId = SlotId::Retired(slot_id);
+            let slot = parse_slot(&slot_args.slot)?;
             let response = handler
                 .metadata(slot)
                 .map_err(|e| anyhow!("Failed to get slot metadata: {}", e))?;
@@ -130,17 +218,7 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), Box<dyn std::
             Ok(())
         }
         Commands::Address(address_args) => {
-            let slot_id = match address_args
-                .slot
-                .as_ref()
-                .and_then(|s| s.parse::<u32>().ok())
-            {
-                Some(input) => {
-                    from_slot_input(input).ok_or_else(|| anyhow!("Invalid slot number"))?
-                }
-                None => RetiredSlotId::R13, // Default to R13 if no slot is provided
-            };
-            let slot: SlotId = SlotId::Retired(slot_id);
+            let slot = parse_slot(&address_args.slot)?;
             let response = handler.get_public_key(slot)?;
             println!("{}", response.sui_address);
             Ok(())
@@ -151,7 +229,7 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), Box<dyn std::
 pub fn process_call_command<R: BufRead>(
     handler: &mut YubiKeyHandler,
     buf_reader: R,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> anyhow::Result<()> {
     let JsonRpcRequest {
         jsonrpc: _,
         method,
@@ -197,12 +275,11 @@ fn handle_request(
         "sign" => {
             let args: SignParams =
                 serde_json::from_value(params).context("Failed to deserialize sign params")?;
-            let slot_id = args
-                .key_id
-                .parse::<u32>()
-                .ok()
-                .and_then(from_slot_input)
-                .unwrap_or(RetiredSlotId::R13);
+            let slot_id = from_slot_input(
+                args.key_id
+                    .parse()
+                    .map_err(|_| error::Error::InvalidSlotNumber)?,
+            )?;
             let slot = SlotId::Retired(slot_id);
 
             let pin = resolve_pin(None)?;
@@ -213,7 +290,7 @@ fn handle_request(
         "keys" => {
             let mut keys = vec![];
             for i in 1..=20 {
-                if let Some(slot_id) = from_slot_input(i) {
+                if let Ok(slot_id) = from_slot_input(i) {
                     let slot = SlotId::Retired(slot_id);
                     if let Ok(resp) = handler.get_public_key(slot) {
                         keys.push(resp);
@@ -225,18 +302,17 @@ fn handle_request(
         "public_key" => {
             let args: PublicKeyParams = serde_json::from_value(params)
                 .context("Failed to deserialize public_key params")?;
-            let slot_id = args
-                .key_id
-                .parse::<u32>()
-                .ok()
-                .and_then(from_slot_input)
-                .ok_or_else(|| anyhow!("Invalid key_id"))?;
+            let slot_id = from_slot_input(
+                args.key_id
+                    .parse()
+                    .map_err(|_| error::Error::InvalidSlotNumber)?,
+            )?;
             let slot = SlotId::Retired(slot_id);
             Ok(serde_json::to_value(handler.get_public_key(slot)?)?)
         }
         "create_key" => {
             for i in 1..=20 {
-                if let Some(slot_id) = from_slot_input(i) {
+                if let Ok(slot_id) = from_slot_input(i) {
                     let slot = SlotId::Retired(slot_id);
                     if handler.get_public_key(slot).is_err() {
                         handler.generate_key(slot, None, false)?;
@@ -264,9 +340,15 @@ pub fn return_error(message: &str, id: u64) {
     );
 }
 
+pub fn parse_slot(slot: &String) -> Result<SlotId, error::Error> {
+    let slot_id = from_slot_input(slot.parse().map_err(|_| error::Error::InvalidSlotNumber)?)?;
+    Ok(SlotId::Retired(slot_id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::Error;
     use crate::yubikey_handler::{DeviceMetadata, GeneratedKeyInfo, MockSmartCard};
 
     use mockall::predicate::*;
@@ -299,7 +381,7 @@ mod tests {
         mock_device
             .expect_generate()
             .with(
-                eq(SlotId::Retired(RetiredSlotId::R13)),
+                eq(SlotId::Retired(RetiredSlotId::R1)),
                 eq(AlgorithmId::EccP256),
                 eq(PinPolicy::Once),
                 eq(TouchPolicy::Always),
@@ -319,7 +401,7 @@ mod tests {
 
         let cli = Cli {
             command: Commands::GenerateKey(GenKeyArgs {
-                slot: None,
+                slot: "1".to_string(),
                 mgmt_key: None,
                 force: true,
             }),
@@ -366,7 +448,7 @@ mod tests {
             .with(
                 function(|digest: &[u8]| digest.len() == 32),
                 eq(AlgorithmId::EccP256),
-                eq(SlotId::Retired(RetiredSlotId::R13)),
+                eq(SlotId::Retired(RetiredSlotId::R1)),
             )
             .times(1)
             .returning(|_, _, _| {
@@ -385,7 +467,7 @@ mod tests {
             command: Commands::Sign(SignArgs {
                 data: tx_base64,
                 pin: Some("123456".to_string()),
-                slot: None,
+                slot: "1".to_string(),
             }),
         };
 
@@ -397,7 +479,7 @@ mod tests {
         let mut mock_device = MockSmartCard::new();
         mock_device
             .expect_metadata()
-            .with(eq(SlotId::Retired(RetiredSlotId::R13)))
+            .with(eq(SlotId::Retired(RetiredSlotId::R1)))
             .returning(|_| {
                 Ok(DeviceMetadata {
                     public_key: VALID_PUBKEY.to_vec(),
@@ -407,12 +489,12 @@ mod tests {
         let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
 
         let params = json!({
-            "key_id": "13"
+            "key_id": "1"
         });
 
         let result = handle_request(&mut handler, "public_key", params).unwrap();
         let resp: PublicKeyResponse = serde_json::from_value(result).unwrap();
-        assert_eq!(resp.key_id, "13");
+        assert_eq!(resp.key_id, "1");
         assert!(resp.sui_address.starts_with("0x"));
     }
 
@@ -420,10 +502,10 @@ mod tests {
     fn test_handle_request_keys() {
         let mut mock_device = MockSmartCard::new();
         // Since it iterates 1..20, and likely some fail or some succeed.
-        // We'll mock returning a key for R13 and error (or empty) for others.
-        // Or we can just mock R13 specifically and let others default if the mock allows fallback or we need expectations for all.
+        // We'll mock returning a key for R1 and error (or empty) for others.
+        // Or we can just mock R1 specifically and let others default if the mock allows fallback or we need expectations for all.
         // Mockall strictness might require expectations for ALL calls unless we use `returning` with a catch-all or partial.
-        // Best approach: Mock R1 always returning Ok, R13 Ok. Others Err.
+        // Best approach: Mock R1 always returning Ok, R1 Ok. Others Err.
         // Actually, logic is: if let Ok(resp) = handler.get_public_key(slot).
         // get_public_key calls metadata.
 
@@ -438,7 +520,7 @@ mod tests {
 
         mock_device
             .expect_metadata()
-            .with(eq(SlotId::Retired(RetiredSlotId::R13)))
+            .with(eq(SlotId::Retired(RetiredSlotId::R2)))
             .returning(|_| {
                 Ok(DeviceMetadata {
                     public_key: VALID_PUBKEY.to_vec(),
@@ -450,13 +532,13 @@ mod tests {
         // We can use a single expect_metadata with a closure that checks slot.
         mock_device.expect_metadata().returning(|slot| {
             if slot == SlotId::Retired(RetiredSlotId::R1)
-                || slot == SlotId::Retired(RetiredSlotId::R13)
+                || slot == SlotId::Retired(RetiredSlotId::R2)
             {
                 Ok(DeviceMetadata {
                     public_key: VALID_PUBKEY.to_vec(),
                 })
             } else {
-                Err(anyhow::anyhow!("Not found").into())
+                Err(Error::SignatureFailed)
             }
         });
 
@@ -506,7 +588,7 @@ mod tests {
 
         let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
         let params = json!({
-            "key_id": "13",
+            "key_id": "1",
             "msg": tx_base64
         });
 
@@ -521,7 +603,7 @@ mod tests {
         // Slot "99" is invalid
         let cli = Cli {
             command: Commands::GenerateKey(GenKeyArgs {
-                slot: Some("99".to_string()),
+                slot: "99".to_string(),
                 mgmt_key: None,
                 force: true,
             }),
@@ -535,7 +617,7 @@ mod tests {
             command: Commands::Sign(SignArgs {
                 data: "dummy".to_string(),
                 pin: None,
-                slot: Some("99".to_string()),
+                slot: "99".to_string(),
             }),
         };
         // We need a fresh mock for sign because execute consumes the box.
@@ -549,7 +631,7 @@ mod tests {
         let mut mock_device = MockSmartCard::new();
         mock_device
             .expect_metadata()
-            .with(eq(SlotId::Retired(RetiredSlotId::R13)))
+            .with(eq(SlotId::Retired(RetiredSlotId::R1)))
             .returning(|_| {
                 Ok(DeviceMetadata {
                     public_key: VALID_PUBKEY.to_vec(),
@@ -563,7 +645,7 @@ mod tests {
             "jsonrpc": "2.0",
             "method": "public_key",
             "params": {
-                "key_id": "13"
+                "key_id": "1"
             },
             "id": 1
         })
@@ -582,7 +664,7 @@ mod tests {
         let mut mock_device = MockSmartCard::new();
         mock_device
             .expect_metadata()
-            .with(eq(SlotId::Retired(RetiredSlotId::R13)))
+            .with(eq(SlotId::Retired(RetiredSlotId::R1)))
             .returning(|_| {
                 Ok(DeviceMetadata {
                     public_key: VALID_PUBKEY.to_vec(),
@@ -590,7 +672,9 @@ mod tests {
             });
 
         let cli = Cli {
-            command: Commands::Address(AddressArgs { slot: None }),
+            command: Commands::Address(AddressArgs {
+                slot: "1".to_string(),
+            }),
         };
 
         execute(cli, Box::new(mock_device)).unwrap();
@@ -622,7 +706,7 @@ mod tests {
                         public_key: VALID_PUBKEY.to_vec(),
                     })
                 } else {
-                    Err(anyhow::anyhow!("Not found").into())
+                    Err(Error::SignatureFailed)
                 }
             });
 
@@ -651,5 +735,55 @@ mod tests {
         let result = handle_request(&mut handler, "create_key", params).unwrap();
         let resp: PublicKeyResponse = serde_json::from_value(result).unwrap();
         assert_eq!(resp.key_id, "2");
+    }
+
+    #[test]
+    fn test_execute_import() {
+        let mut mock_device = MockSmartCard::new();
+
+        mock_device
+            .expect_authenticate()
+            .with(always())
+            .times(1)
+            .returning(|_| Ok(()));
+
+        mock_device.expect_metadata().returning(|_| {
+            Ok(DeviceMetadata {
+                public_key: VALID_PUBKEY.to_vec(),
+            })
+        });
+
+        mock_device
+            .expect_import_key()
+            .with(
+                eq(SlotId::Retired(RetiredSlotId::R1)), // Default slot
+                function(|key: &[u8]| key.len() == 32), // Check it's a valid private key length
+                eq(PinPolicy::Once),                    // Default
+                eq(TouchPolicy::Always),                // Default
+            )
+            .times(1)
+            .returning(|_, _, _, _| {
+                Ok(GeneratedKeyInfo {
+                    public_key: VALID_PUBKEY.to_vec(),
+                })
+            });
+
+        // Valid 12-word mnemonic for testing
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+        let cli = Cli {
+            command: Commands::Import(ImportArgs {
+                words: mnemonic.to_string(),
+                slot: "1".to_string(),
+                force: true,
+                pin_policy: None,
+                touch_policy: None,
+                key_scheme: "secp256r1".to_string(),
+                derivation_path: None,
+                word_length: "word12".to_string(),
+            }),
+        };
+
+        execute(cli, Box::new(mock_device)).unwrap();
     }
 }
