@@ -1,6 +1,6 @@
 use crate::error;
 use crate::types::*;
-use crate::yubikey_handler::{from_slot_input, resolve_pin, SmartCard, YubiKeyHandler};
+use crate::yubikey_handler::{from_slot_input, parse_slot, resolve_pin, SmartCard, YubiKeyHandler};
 use anyhow::{anyhow, Context};
 use clap::{Args, Parser, Subcommand};
 use serde_json::{json, Value};
@@ -339,11 +339,6 @@ pub fn return_error(message: &str, id: u64) {
             "id": id,
         })
     );
-}
-
-pub fn parse_slot(slot: &String) -> Result<SlotId, error::Error> {
-    let slot_id = from_slot_input(slot.parse().map_err(|_| error::Error::InvalidSlotNumber)?)?;
-    Ok(SlotId::Retired(slot_id))
 }
 
 #[cfg(test)]

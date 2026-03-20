@@ -24,6 +24,6 @@ pub enum Error {
     #[error("Failed to import key")]
     KeyImportFailed,
 
-    #[error("Yubikey error: {0}")]
+    #[error(transparent)]
     YubikeyError(#[from] yubikey::Error),
 }
