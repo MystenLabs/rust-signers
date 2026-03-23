@@ -11,27 +11,17 @@ fastcrypto = { workspace = true }
 sui-types = { workspace = true }
 shared-crypto = { workspace = true }
 sui-keys = { workspace = true }
-anyhow = { workspace = true }
 bcs = { workspace = true }
 p256 = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
 zeroize = { workspace = true }
 serde_json = { workspace = true }
-serde = { workspace = true }
 mockall = { workspace = true }
 signer-types = { workspace = true }
 pinentry = { workspace = true }
 secrecy = { workspace = true }
-x509-cert = { workspace = true }
-der = { workspace = true }
-spki = { workspace = true }
-pem-rfc7468 = { workspace = true }
 tiny-bip39 = { workspace = true }
-bip32 = { workspace = true }
-slip10_ed25519 = { workspace = true }
-hmac = { workspace = true }
-sha2 = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

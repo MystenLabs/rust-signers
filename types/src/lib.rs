@@ -10,10 +10,30 @@ pub struct JsonRpcRequest {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct JsonRpcResponse {
+#[serde(untagged)]
+pub enum JsonRpcResponse {
+    Success(JsonRpcSuccess),
+    Error(JsonRpcFailure),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JsonRpcSuccess {
     pub jsonrpc: String,
-    pub result: Value,
+    pub result: serde_json::Value,
     pub id: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JsonRpcFailure {
+    pub jsonrpc: String,
+    pub error: JsonRpcErrorObject,
+    pub id: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JsonRpcErrorObject {
+    pub code: i64,
+    pub message: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -49,3 +69,18 @@ pub struct PublicKeyResponse {
 pub struct SignatureResponse {
     pub signature: String,
 }
+
+
+macro_rules! impl_json_display {
+  ($($ty:ty),+ $(,)?) => {
+      $(
+          impl std::fmt::Display for $ty {
+              fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                  let json = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
+                  f.write_str(&json)
+              }
+          }
+      )+
+  };
+}
+impl_json_display!(JsonRpcRequest, JsonRpcSuccess, JsonRpcFailure, JsonRpcResponse);

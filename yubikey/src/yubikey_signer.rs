@@ -1,10 +1,10 @@
 use crate::jsonrpc::process_call_command;
 use crate::yubikey_handler::{parse_slot, resolve_pin, SmartCard, YubiKeyHandler};
-use anyhow::anyhow;
 use clap::{Args, Parser, Subcommand};
 use signer_types::PublicKey;
 use std::io;
 
+use crate::error::{AppError, SignerError};
 use sui_types::crypto::{KeypairTraits as KeyPair, ToFromBytes};
 use yubikey::{MgmKey, PinPolicy, TouchPolicy};
 use zeroize::ZeroizeOnDrop;
@@ -111,7 +111,7 @@ pub struct GenKeyArgs {
     pub force: bool,
 }
 
-pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
+pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), AppError> {
     // Determine verbosity based on command
     let verbose = !matches!(&cli.command, Commands::Call);
 
@@ -124,7 +124,8 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
             let m_key = match &gen_key_args.mgmt_key {
                 Some(m) => MgmKey::from_bytes(m.as_str()),
                 None => Ok(MgmKey::default()),
-            }?;
+            }
+            .map_err(|_| SignerError::BadManagementKey)?;
 
             handler.generate_key(slot, Some(m_key), gen_key_args.force)?;
             Ok(())
@@ -132,12 +133,13 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
         Commands::Import(import_args) => {
             let slot = parse_slot(&import_args.slot)?;
 
-            let key_scheme = import_args.key_scheme
+            let key_scheme = import_args
+                .key_scheme
                 .parse::<sui_types::crypto::SignatureScheme>()
-                .map_err(|_| anyhow!("Unsupported key scheme. YubiKey only supports [secp256r1, ed25519, secp256k1] (though import might fail on device for non-r1)"))?;
+                .map_err(|_| SignerError::InvalidSignatureScheme)?;
 
             if key_scheme != sui_types::crypto::SignatureScheme::Secp256r1 {
-                return Err(anyhow!("YubiKey only supports secp256r1 key scheme"));
+                return Err(SignerError::InvalidSignatureScheme.into());
             }
 
             let derivation_path = import_args
@@ -145,13 +147,13 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
                 .as_deref()
                 .map(|s| {
                     s.parse()
-                        .map_err(|e| anyhow!("Invalid derivation path: {:?}", e))
+                        .map_err(|_| SignerError::InvalidDerivationPath(s.to_string()))
                 })
                 .transpose()?;
 
             let mnemonic =
                 bip39::Mnemonic::from_phrase(&import_args.words, bip39::Language::English)
-                    .map_err(|e| anyhow!("Invalid mnemonic: {}", e))?;
+                    .map_err(|_| SignerError::InvalidMnemonic)?;
             let seed = bip39::Seed::new(&mnemonic, "");
 
             // Path handling
@@ -159,13 +161,13 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
 
             let (_address, kp) =
                 sui_keys::key_derive::derive_key_pair_from_path(seed.as_bytes(), path, &key_scheme)
-                    .map_err(|e| anyhow!("Failed to derive key pair: {}", e))?;
+                    .map_err(|_| SignerError::KeyDerivationFailed)?;
 
             let key = match kp {
                 sui_types::crypto::SuiKeyPair::Secp256r1(k) => {
                     k.copy().private().as_bytes().to_vec()
                 }
-                _ => return Err(anyhow!("Unexpected key type derived")),
+                _ => return Err(SignerError::UnexpectedKeyType.into()),
             };
 
             let pin_policy = match &import_args.pin_policy {
@@ -173,7 +175,7 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
                     "always" => PinPolicy::Always,
                     "once" => PinPolicy::Once,
                     "never" => PinPolicy::Never,
-                    _ => return Err(anyhow!("Invalid pin policy. Allowed: always, once, never")),
+                    _ => return Err(AppError::InvalidPinPolicy),
                 },
                 None => PinPolicy::Once,
             };
@@ -183,11 +185,7 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
                     "always" => TouchPolicy::Always,
                     "cached" => TouchPolicy::Cached,
                     "never" => TouchPolicy::Never,
-                    _ => {
-                        return Err(anyhow!(
-                            "Invalid touch policy. Allowed: always, cached, never"
-                        ))
-                    }
+                    _ => return Err(AppError::InvalidTouchPolicy),
                 },
                 None => TouchPolicy::Always,
             };
@@ -209,9 +207,7 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
         }
         Commands::Slot(slot_args) => {
             let slot = parse_slot(&slot_args.slot)?;
-            let response = handler
-                .get_public_key(slot)
-                .map_err(|e| anyhow!("Failed to get slot info: {}", e))?;
+            let response = handler.get_public_key(slot)?;
             println!("Public Key Information:");
             println!("  Sui Address: {}", response.sui_address);
             match response.public_key {
@@ -238,7 +234,6 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Error;
     use crate::jsonrpc::{handle_request, process_call_command};
     use crate::yubikey_handler::{DeviceMetadata, GeneratedKeyInfo, MockSmartCard};
 
@@ -431,7 +426,7 @@ mod tests {
                     public_key: VALID_PUBKEY.to_vec(),
                 })
             } else {
-                Err(Error::SignatureFailed)
+                Err(SignerError::SignatureFailed)
             }
         });
 
@@ -546,7 +541,7 @@ mod tests {
 
         // Add newline because read_json_line uses read_line
         let input = format!("{}\n", input_json);
-        let cursor = std::io::Cursor::new(input);
+        let cursor = io::Cursor::new(input);
 
         // We can capture stdout if we really want to check the output, but for now we check it returns Ok
         let result = process_call_command(&mut handler, cursor);
@@ -599,7 +594,7 @@ mod tests {
                         public_key: VALID_PUBKEY.to_vec(),
                     })
                 } else {
-                    Err(Error::SignatureFailed)
+                    Err(SignerError::SignatureFailed)
                 }
             });
 

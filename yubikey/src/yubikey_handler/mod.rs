@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::SignerError;
 pub use device::YubiKeyHandler;
 use mockall::automock;
 use std::env;
@@ -21,32 +21,32 @@ pub struct GeneratedKeyInfo {
 
 #[automock]
 pub trait SmartCard {
-    fn authenticate(&mut self, key: MgmKey) -> Result<(), Error>;
-    fn metadata(&mut self, slot: SlotId) -> Result<DeviceMetadata, Error>;
+    fn authenticate(&mut self, key: MgmKey) -> Result<(), SignerError>;
+    fn metadata(&mut self, slot: SlotId) -> Result<DeviceMetadata, SignerError>;
     fn generate(
         &mut self,
         slot: SlotId,
         alg: AlgorithmId,
         pin_policy: PinPolicy,
         touch_policy: TouchPolicy,
-    ) -> Result<GeneratedKeyInfo, Error>;
+    ) -> Result<GeneratedKeyInfo, SignerError>;
     fn sign_data(
         &mut self,
         digest: &[u8],
         alg: AlgorithmId,
         slot: SlotId,
-    ) -> Result<Vec<u8>, Error>;
-    fn verify_pin(&mut self, pin: &[u8]) -> Result<(), Error>;
+    ) -> Result<Vec<u8>, SignerError>;
+    fn verify_pin(&mut self, pin: &[u8]) -> Result<(), SignerError>;
     fn import_key(
         &mut self,
         slot: SlotId,
         key_data: &[u8],
         pin_policy: PinPolicy,
         touch_policy: TouchPolicy,
-    ) -> Result<GeneratedKeyInfo, Error>;
+    ) -> Result<GeneratedKeyInfo, SignerError>;
 }
 
-pub fn from_slot_input(input: u32) -> Result<RetiredSlotId, Error> {
+pub fn from_slot_input(input: u32) -> Result<RetiredSlotId, SignerError> {
     match input {
         1 => Ok(RetiredSlotId::R1),
         2 => Ok(RetiredSlotId::R2),
@@ -68,11 +68,11 @@ pub fn from_slot_input(input: u32) -> Result<RetiredSlotId, Error> {
         18 => Ok(RetiredSlotId::R18),
         19 => Ok(RetiredSlotId::R19),
         20 => Ok(RetiredSlotId::R20),
-        _ => Err(Error::InvalidSlotNumber),
+        _ => Err(SignerError::InvalidSlotNumber),
     }
 }
 
-pub fn resolve_pin(explicit_pin: Option<String>) -> Result<String, Error> {
+pub fn resolve_pin(explicit_pin: Option<String>) -> Result<String, SignerError> {
     if let Some(p) = explicit_pin {
         return Ok(p);
     }
@@ -107,8 +107,8 @@ pub fn resolve_pin(explicit_pin: Option<String>) -> Result<String, Error> {
     Ok("123456".to_string())
 }
 
-pub fn parse_slot(slot: &String) -> Result<SlotId, Error> {
-    let slot_id = from_slot_input(slot.parse().map_err(|_| Error::InvalidSlotNumber)?)?;
+pub fn parse_slot(slot: &String) -> Result<SlotId, SignerError> {
+    let slot_id = from_slot_input(slot.parse().map_err(|_| SignerError::InvalidSlotNumber)?)?;
     Ok(SlotId::Retired(slot_id))
 }
 
@@ -163,8 +163,14 @@ pub mod tests {
         assert_eq!(from_slot_input(20).unwrap(), RetiredSlotId::R20);
 
         // Test invalid inputs
-        assert_eq!(from_slot_input(0).unwrap_err(), Error::InvalidSlotNumber);
-        assert_eq!(from_slot_input(21).unwrap_err(), Error::InvalidSlotNumber);
+        assert_eq!(
+            from_slot_input(0).unwrap_err(),
+            SignerError::InvalidSlotNumber
+        );
+        assert_eq!(
+            from_slot_input(21).unwrap_err(),
+            SignerError::InvalidSlotNumber
+        );
     }
 
     #[test]

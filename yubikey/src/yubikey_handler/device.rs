@@ -1,6 +1,6 @@
 use super::{DeviceMetadata, GeneratedKeyInfo, SmartCard};
 
-use crate::error::Error;
+use crate::error::SignerError;
 use fastcrypto::encoding::{Base64, Encoding, Hex};
 use fastcrypto::hash::{Blake2b256, HashFunction, Sha256};
 use fastcrypto::secp256r1::Secp256r1PublicKey;
@@ -18,7 +18,7 @@ pub struct RealSmartCard {
 }
 
 impl RealSmartCard {
-    pub fn new() -> Result<Self, Error> {
+    pub fn new() -> Result<Self, SignerError> {
         Ok(Self {
             device: YubiKey::open()?,
         })
@@ -26,20 +26,20 @@ impl RealSmartCard {
 }
 
 impl SmartCard for RealSmartCard {
-    fn authenticate(&mut self, key: MgmKey) -> Result<(), Error> {
+    fn authenticate(&mut self, key: MgmKey) -> Result<(), SignerError> {
         self.device
             .authenticate(key)
-            .map_err(|_| Error::AuthenticationFailed)
+            .map_err(|_| SignerError::AuthenticationFailed)
     }
 
-    fn metadata(&mut self, slot: SlotId) -> Result<DeviceMetadata, Error> {
+    fn metadata(&mut self, slot: SlotId) -> Result<DeviceMetadata, SignerError> {
         let meta = yubikey::piv::metadata(&mut self.device, slot)?;
         let public_key = meta
             .public
-            .ok_or(Error::NoPublicKey)?
+            .ok_or(SignerError::NoPublicKey)?
             .subject_public_key
             .as_bytes()
-            .ok_or(Error::PublicKeyMalformed)?
+            .ok_or(SignerError::PublicKeyMalformed)?
             .to_vec();
         Ok(DeviceMetadata { public_key })
     }
@@ -50,13 +50,13 @@ impl SmartCard for RealSmartCard {
         alg: AlgorithmId,
         pin_policy: PinPolicy,
         touch_policy: TouchPolicy,
-    ) -> Result<GeneratedKeyInfo, Error> {
+    ) -> Result<GeneratedKeyInfo, SignerError> {
         let key = generate(&mut self.device, slot, alg, pin_policy, touch_policy)
-            .map_err(|_| Error::KeyGenerationFailed)?;
+            .map_err(|_| SignerError::KeyGenerationFailed)?;
         let public_key = key
             .subject_public_key
             .as_bytes()
-            .ok_or(Error::PublicKeyMalformed)?
+            .ok_or(SignerError::PublicKeyMalformed)?
             .to_vec();
         Ok(GeneratedKeyInfo { public_key })
     }
@@ -66,16 +66,16 @@ impl SmartCard for RealSmartCard {
         digest: &[u8],
         alg: AlgorithmId,
         slot: SlotId,
-    ) -> Result<Vec<u8>, Error> {
-        let sig =
-            sign_data(&mut self.device, digest, alg, slot).map_err(|_| Error::SignatureFailed)?;
+    ) -> Result<Vec<u8>, SignerError> {
+        let sig = sign_data(&mut self.device, digest, alg, slot)
+            .map_err(|_| SignerError::SignatureFailed)?;
         Ok(sig.to_vec())
     }
 
-    fn verify_pin(&mut self, pin: &[u8]) -> Result<(), Error> {
+    fn verify_pin(&mut self, pin: &[u8]) -> Result<(), SignerError> {
         self.device
             .verify_pin(pin)
-            .map_err(|_| Error::AuthenticationFailed)
+            .map_err(|_| SignerError::AuthenticationFailed)
     }
 
     fn import_key(
@@ -84,7 +84,7 @@ impl SmartCard for RealSmartCard {
         key_data: &[u8],
         pin_policy: PinPolicy,
         touch_policy: TouchPolicy,
-    ) -> Result<GeneratedKeyInfo, Error> {
+    ) -> Result<GeneratedKeyInfo, SignerError> {
         // 1. Import the private key
         // Using `yubikey::piv::import_key` which is available with "untested" feature or standard in 0.8.0?
         // If "untested" feature enabled, it should work.
@@ -102,7 +102,7 @@ impl SmartCard for RealSmartCard {
         use p256::elliptic_curve::sec1::ToEncodedPoint;
 
         let secret_key =
-            p256::SecretKey::from_slice(key_data).map_err(|_| Error::KeyImportFailed)?;
+            p256::SecretKey::from_slice(key_data).map_err(|_| SignerError::KeyImportFailed)?;
         let public_key_obj = secret_key.public_key();
         let public_key_bytes = public_key_obj.to_encoded_point(false).as_bytes().to_vec();
 
@@ -128,14 +128,14 @@ impl YubiKeyHandler {
         pin_policy: PinPolicy,
         touch_policy: TouchPolicy,
         force: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<(), SignerError> {
         self.device.authenticate(MgmKey::default())?;
 
         // metadata check
         let existing = self.device.metadata(slot).is_ok();
 
         if existing && !force {
-            return Err(Error::KeyAlreadyExists);
+            return Err(SignerError::KeyAlreadyExists);
         }
 
         if self.verbose {
@@ -182,13 +182,13 @@ impl YubiKeyHandler {
         slot: SlotId,
         mgmt_key: Option<MgmKey>,
         force: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<(), SignerError> {
         let algorithm = AlgorithmId::EccP256;
 
         self.device.authenticate(mgmt_key.unwrap_or_default())?;
         let existing_data = self.device.metadata(slot).ok();
         if existing_data.is_some() && !force {
-            return Err(Error::KeyAlreadyExists);
+            return Err(SignerError::KeyAlreadyExists);
         }
         if self.verbose {
             println!("Generating Key on {:?}", slot);
@@ -225,11 +225,11 @@ impl YubiKeyHandler {
     }
 
     #[allow(dead_code)]
-    pub fn metadata(&mut self, slot: SlotId) -> Result<DeviceMetadata, Error> {
+    pub fn metadata(&mut self, slot: SlotId) -> Result<DeviceMetadata, SignerError> {
         self.device.metadata(slot)
     }
 
-    pub fn get_public_key(&mut self, slot: SlotId) -> Result<PublicKeyResponse, Error> {
+    pub fn get_public_key(&mut self, slot: SlotId) -> Result<PublicKeyResponse, SignerError> {
         let metadata = self.device.metadata(slot)?;
         // Metadata now directly contains public key bytes (DeviceMetadata)
 
@@ -264,7 +264,7 @@ impl YubiKeyHandler {
         slot: SlotId,
         data: &str,
         pin: &str,
-    ) -> Result<String, Error> {
+    ) -> Result<String, SignerError> {
         let algorithm = AlgorithmId::EccP256;
 
         // Check if key exists (implicitly by getting metadata)
@@ -276,11 +276,11 @@ impl YubiKeyHandler {
         let pk_bytes = binding.as_bytes();
 
         let msg: TransactionData =
-            bcs::from_bytes(&Base64::decode(data).map_err(|_| Error::SignatureFailed)?)
-                .map_err(|_| Error::SignatureFailed)?;
+            bcs::from_bytes(&Base64::decode(data).map_err(|_| SignerError::SignatureFailed)?)
+                .map_err(|_| SignerError::SignatureFailed)?;
         let intent_msg = IntentMessage::new(Intent::sui_transaction(), msg);
         let mut hasher = Blake2b256::new();
-        hasher.update(bcs::to_bytes(&intent_msg).map_err(|_| Error::SignatureFailed)?);
+        hasher.update(bcs::to_bytes(&intent_msg).map_err(|_| SignerError::SignatureFailed)?);
         let digest = hasher.finalize().digest;
 
         let mut hasher2 = Sha256::default();

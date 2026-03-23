@@ -67,7 +67,7 @@ pub async fn run_cli<R: BufRead>(
         return Err((anyhow::anyhow!("Method is required"), id));
     }
 
-    serde_json::to_value(JsonRpcResponse {
+    serde_json::to_value(JsonRpcSuccess {
         jsonrpc: "2.0".to_string(),
         result: handle_request(&method, params, ledger_conn_type)
             .await

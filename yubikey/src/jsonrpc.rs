@@ -1,30 +1,33 @@
+use crate::error::{AppError, SignerError};
 use crate::yubikey_handler::{from_slot_input, parse_slot, resolve_pin, YubiKeyHandler};
-use anyhow::{anyhow, Context};
-use serde_json::{json, Value};
+use serde_json::Value;
 use signer_types::*;
 use std::io::BufRead;
 use yubikey::piv::SlotId;
 
-pub fn process_call_command<R: BufRead>(
+pub(crate) fn process_call_command<R: BufRead>(
     handler: &mut YubiKeyHandler,
     buf_reader: R,
-) -> anyhow::Result<()> {
+) -> Result<(), AppError> {
     let JsonRpcRequest {
         jsonrpc: _,
         method,
         params,
         id,
-    } = read_json_line(buf_reader).expect("Unable to deserialize request");
+    } = read_json_line(buf_reader).map_err(|e| AppError::Deserialize {
+        target: "JsonRpcRequest",
+        source: e,
+    })?;
 
     if method.is_empty() {
-        let error = anyhow!("Method is required");
+        let error = AppError::JsonRpcMethodRequired;
         return_error(&error.to_string(), id);
         return Err(error);
     }
 
     match handle_request(handler, &method, params) {
         Ok(result) => {
-            let response = JsonRpcResponse {
+            let response = JsonRpcSuccess {
                 jsonrpc: "2.0".to_string(),
                 result,
                 id,
@@ -43,11 +46,14 @@ pub(crate) fn handle_request(
     handler: &mut YubiKeyHandler,
     method: &str,
     params: Value,
-) -> Result<Value, anyhow::Error> {
+) -> Result<Value, AppError> {
     match method {
         "sign" => {
             let args: SignParams =
-                serde_json::from_value(params).context("Failed to deserialize sign params")?;
+                serde_json::from_value(params).map_err(|e| AppError::Deserialize {
+                    target: "SignParams",
+                    source: e,
+                })?;
             let slot = parse_slot(&args.key_id)?;
 
             let pin = resolve_pin(None)?;
@@ -68,8 +74,11 @@ pub(crate) fn handle_request(
             Ok(serde_json::to_value(KeysResponse { keys })?)
         }
         "public_key" => {
-            let args: PublicKeyParams = serde_json::from_value(params)
-                .context("Failed to deserialize public_key params")?;
+            let args: PublicKeyParams =
+                serde_json::from_value(params).map_err(|e| AppError::Deserialize {
+                    target: "PublicKeyParams",
+                    source: e,
+                })?;
             let slot = parse_slot(&args.key_id)?;
             Ok(serde_json::to_value(handler.get_public_key(slot)?)?)
         }
@@ -83,9 +92,9 @@ pub(crate) fn handle_request(
                     }
                 }
             }
-            Err(anyhow!("No available slots found"))
+            Err(SignerError::NoAvailableSlots.into())
         }
-        _ => Err(anyhow!("Invalid method: {}", method)),
+        _ => Err(AppError::JsonRpcInvalidMethod.into()),
     }
 }
 
@@ -98,13 +107,13 @@ fn read_json_line<R: BufRead>(mut buf_reader: R) -> Result<JsonRpcRequest, serde
 fn return_error(message: &str, id: u64) {
     println!(
         "{}",
-        json!({
-            "jsonrpc": "2.0",
-            "error": {
-                "code": 1,
-                "message": message,
+        JsonRpcFailure {
+            jsonrpc: "2.0".to_string(),
+            error: JsonRpcErrorObject {
+                code: 1,
+                message: message.to_string(),
             },
-            "id": id,
-        })
+            id,
+        }
     );
 }
