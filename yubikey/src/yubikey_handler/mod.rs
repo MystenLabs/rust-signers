@@ -6,7 +6,6 @@ use yubikey::piv::AlgorithmId;
 use yubikey::piv::RetiredSlotId;
 use yubikey::piv::SlotId;
 use yubikey::{MgmKey, PinPolicy, TouchPolicy};
-use crate::error;
 
 pub mod device;
 
@@ -108,8 +107,8 @@ pub fn resolve_pin(explicit_pin: Option<String>) -> Result<String, Error> {
     Ok("123456".to_string())
 }
 
-pub fn parse_slot(slot: &String) -> Result<SlotId, error::Error> {
-    let slot_id = from_slot_input(slot.parse().map_err(|_| error::Error::InvalidSlotNumber)?)?;
+pub fn parse_slot(slot: &String) -> Result<SlotId, Error> {
+    let slot_id = from_slot_input(slot.parse().map_err(|_| Error::InvalidSlotNumber)?)?;
     Ok(SlotId::Retired(slot_id))
 }
 
@@ -164,14 +163,8 @@ pub mod tests {
         assert_eq!(from_slot_input(20).unwrap(), RetiredSlotId::R20);
 
         // Test invalid inputs
-        assert_eq!(
-            from_slot_input(0).unwrap_err(),
-            Error::InvalidSlotNumber
-        );
-        assert_eq!(
-            from_slot_input(21).unwrap_err(),
-            Error::InvalidSlotNumber
-        );
+        assert_eq!(from_slot_input(0).unwrap_err(), Error::InvalidSlotNumber);
+        assert_eq!(from_slot_input(21).unwrap_err(), Error::InvalidSlotNumber);
     }
 
     #[test]

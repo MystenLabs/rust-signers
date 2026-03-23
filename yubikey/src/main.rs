@@ -1,14 +1,14 @@
-mod cli;
 mod error;
-mod types;
+mod jsonrpc;
 mod yubikey_handler;
-use crate::cli::Cli;
+mod yubikey_signer;
 use crate::yubikey_handler::device::RealSmartCard;
+use crate::yubikey_signer::Cli;
 use anyhow::Context;
 use clap::Parser;
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let device = Box::new(RealSmartCard::new().context("failed to open YubiKey device")?);
-    cli::execute(cli, device)
+    yubikey_signer::execute(cli, device)
 }

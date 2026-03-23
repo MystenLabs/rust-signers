@@ -1,13 +1,11 @@
-use crate::error;
-use crate::types::*;
-use crate::yubikey_handler::{from_slot_input, parse_slot, resolve_pin, SmartCard, YubiKeyHandler};
-use anyhow::{anyhow, Context};
+use crate::jsonrpc::process_call_command;
+use crate::yubikey_handler::{parse_slot, resolve_pin, SmartCard, YubiKeyHandler};
+use anyhow::anyhow;
 use clap::{Args, Parser, Subcommand};
-use serde_json::{json, Value};
-use std::io::{self, BufRead};
+use signer_types::PublicKey;
+use std::io;
 
 use sui_types::crypto::{KeypairTraits as KeyPair, ToFromBytes};
-use yubikey::piv::SlotId;
 use yubikey::{MgmKey, PinPolicy, TouchPolicy};
 use zeroize::ZeroizeOnDrop;
 
@@ -217,11 +215,11 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
             println!("Public Key Information:");
             println!("  Sui Address: {}", response.sui_address);
             match response.public_key {
-                crate::types::PublicKey::Secp256r1(key) => {
+                PublicKey::Secp256r1(key) => {
                     println!("  Public Key (Base64): {}", key);
                     println!("  Key Scheme: Secp256r1");
                 }
-                crate::types::PublicKey::Ed25519(key) => {
+                PublicKey::Ed25519(key) => {
                     println!("  Public Key (Base64): {}", key);
                     println!("  Key Scheme: Ed25519");
                 }
@@ -237,117 +235,16 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> anyhow::Result<()> {
     }
 }
 
-pub fn process_call_command<R: BufRead>(
-    handler: &mut YubiKeyHandler,
-    buf_reader: R,
-) -> anyhow::Result<()> {
-    let JsonRpcRequest {
-        jsonrpc: _,
-        method,
-        params,
-        id,
-    } = read_json_line(buf_reader).expect("Unable to deserialize request");
-
-    if method.is_empty() {
-        let e = anyhow::anyhow!("Method is required");
-        return_error(&e.to_string(), id);
-        return Err(e.into());
-    }
-
-    match handle_request(handler, &method, params) {
-        Ok(result) => {
-            let response = JsonRpcResponse {
-                jsonrpc: "2.0".to_string(),
-                result,
-                id,
-            };
-            println!("{}", serde_json::to_string(&response).unwrap());
-            Ok(())
-        }
-        Err(e) => {
-            return_error(&e.to_string(), id);
-            Err(e.into())
-        }
-    }
-}
-
-pub fn read_json_line<R: BufRead>(mut buf_reader: R) -> Result<JsonRpcRequest, serde_json::Error> {
-    let mut input = String::new();
-    buf_reader.read_line(&mut input).unwrap();
-    serde_json::from_str(&input)
-}
-
-fn handle_request(
-    handler: &mut YubiKeyHandler,
-    method: &str,
-    params: Value,
-) -> Result<Value, anyhow::Error> {
-    match method {
-        "sign" => {
-            let args: SignParams =
-                serde_json::from_value(params).context("Failed to deserialize sign params")?;
-            let slot = parse_slot(&args.key_id)?;
-
-            let pin = resolve_pin(None)?;
-            let signature = handler.sign_transaction(slot, &args.msg, &pin)?;
-
-            Ok(serde_json::to_value(SignatureResponse { signature })?)
-        }
-        "keys" => {
-            let mut keys = vec![];
-            for i in 1..=20 {
-                if let Ok(slot_id) = from_slot_input(i) {
-                    let slot = SlotId::Retired(slot_id);
-                    if let Ok(resp) = handler.get_public_key(slot) {
-                        keys.push(resp);
-                    }
-                }
-            }
-            Ok(serde_json::to_value(KeysResponse { keys })?)
-        }
-        "public_key" => {
-            let args: PublicKeyParams = serde_json::from_value(params)
-                .context("Failed to deserialize public_key params")?;
-            let slot = parse_slot(&args.key_id)?;
-            Ok(serde_json::to_value(handler.get_public_key(slot)?)?)
-        }
-        "create_key" => {
-            for i in 1..=20 {
-                if let Ok(slot_id) = from_slot_input(i) {
-                    let slot = SlotId::Retired(slot_id);
-                    if handler.get_public_key(slot).is_err() {
-                        handler.generate_key(slot, None, false)?;
-                        return Ok(serde_json::to_value(handler.get_public_key(slot)?)?);
-                    }
-                }
-            }
-            Err(anyhow!("No available slots found"))
-        }
-        _ => Err(anyhow!("Invalid method: {}", method)),
-    }
-}
-
-pub fn return_error(message: &str, id: u64) {
-    println!(
-        "{}",
-        json!({
-            "jsonrpc": "2.0",
-            "error": {
-                "code": 1,
-                "message": message,
-            },
-            "id": id,
-        })
-    );
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::error::Error;
+    use crate::jsonrpc::{handle_request, process_call_command};
     use crate::yubikey_handler::{DeviceMetadata, GeneratedKeyInfo, MockSmartCard};
 
     use mockall::predicate::*;
+    use serde_json::json;
+    use signer_types::{KeysResponse, PublicKeyResponse, SignatureResponse};
     use yubikey::piv::{AlgorithmId, RetiredSlotId, SlotId};
     use yubikey::{PinPolicy, TouchPolicy};
 

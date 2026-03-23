@@ -1,12 +1,12 @@
 use super::{DeviceMetadata, GeneratedKeyInfo, SmartCard};
 
 use crate::error::Error;
-use crate::types::*;
 use fastcrypto::encoding::{Base64, Encoding, Hex};
 use fastcrypto::hash::{Blake2b256, HashFunction, Sha256};
 use fastcrypto::secp256r1::Secp256r1PublicKey;
 use fastcrypto::traits::ToFromBytes;
 use shared_crypto::intent::{Intent, IntentMessage};
+use signer_types::*;
 use sui_types::crypto::SignatureScheme;
 use sui_types::transaction::TransactionData;
 use tracing::info;
