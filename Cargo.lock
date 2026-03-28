@@ -5843,6 +5843,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "tiny-bip39",
 ]
 
 [[package]]
@@ -7867,7 +7868,7 @@ dependencies = [
 
 [[package]]
 name = "yubikey-signer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bcs",
  "clap",

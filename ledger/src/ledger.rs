@@ -76,18 +76,18 @@ pub async fn get_public_key(
     let response_data = ledger.sui_get_public_key(derivation_path, false).await?;
 
     if response_data.is_empty() {
-        return Err(
-            AppError::PublicKeyFailed("Empty response from Ledger device".to_string()),
-        );
+        return Err(AppError::PublicKeyFailed(
+            "Empty response from Ledger device".to_string(),
+        ));
     }
 
     // Parse Sui response format: [key_size][public_key][address_size][address]
     let key_size = response_data[0] as usize;
 
     if response_data.len() < 1 + key_size {
-        return Err(
-            AppError::PublicKeyFailed("Invalid response from Ledger device".to_string()),
-        );
+        return Err(AppError::PublicKeyFailed(
+            "Invalid response from Ledger device".to_string(),
+        ));
     }
 
     // Extract public key

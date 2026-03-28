@@ -107,7 +107,7 @@ pub fn resolve_pin(explicit_pin: Option<String>) -> Result<String, SignerError> 
     Ok("123456".to_string())
 }
 
-pub fn parse_slot(slot: &String) -> Result<SlotId, SignerError> {
+pub fn parse_slot(slot: &str) -> Result<SlotId, SignerError> {
     let slot_id = from_slot_input(slot.parse().map_err(|_| SignerError::InvalidSlotNumber)?)?;
     Ok(SlotId::Retired(slot_id))
 }

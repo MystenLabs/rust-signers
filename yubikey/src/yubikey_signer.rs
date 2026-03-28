@@ -5,7 +5,7 @@ use signer_types::PublicKey;
 use std::io;
 
 use crate::error::{AppError, SignerError};
-use sui_types::crypto::{KeypairTraits as KeyPair, ToFromBytes};
+use sui_types::crypto::{KeypairTraits as KeyPair, SuiKeyPair, ToFromBytes};
 use yubikey::{MgmKey, PinPolicy, TouchPolicy};
 use zeroize::ZeroizeOnDrop;
 
@@ -163,12 +163,7 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), AppError> {
                 sui_keys::key_derive::derive_key_pair_from_path(seed.as_bytes(), path, &key_scheme)
                     .map_err(|_| SignerError::KeyDerivationFailed)?;
 
-            let key = match kp {
-                sui_types::crypto::SuiKeyPair::Secp256r1(k) => {
-                    k.copy().private().as_bytes().to_vec()
-                }
-                _ => return Err(SignerError::UnexpectedKeyType.into()),
-            };
+            let key = secp256r1_key_bytes(kp)?;
 
             let pin_policy = match &import_args.pin_policy {
                 Some(p) => match p.to_lowercase().as_str() {
@@ -231,6 +226,13 @@ pub fn execute(cli: Cli, device: Box<dyn SmartCard>) -> Result<(), AppError> {
     }
 }
 
+pub fn secp256r1_key_bytes(kp: SuiKeyPair) -> Result<Vec<u8>, SignerError> {
+    match kp {
+        SuiKeyPair::Secp256r1(k) => Ok(k.copy().private().as_bytes().to_vec()),
+        _ => Err(SignerError::UnexpectedKeyType),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,7 +241,7 @@ mod tests {
 
     use mockall::predicate::*;
     use serde_json::json;
-    use signer_types::{KeysResponse, PublicKeyResponse, SignatureResponse};
+    use signer_types::JsonRpcResult;
     use yubikey::piv::{AlgorithmId, RetiredSlotId, SlotId};
     use yubikey::{PinPolicy, TouchPolicy};
 
@@ -380,8 +382,11 @@ mod tests {
             "key_id": "1"
         });
 
-        let result = handle_request(&mut handler, "public_key", params).unwrap();
-        let resp: PublicKeyResponse = serde_json::from_value(result).unwrap();
+        let JsonRpcResult::PublicKeyResponse(resp) =
+            handle_request(&mut handler, "public_key", params).unwrap()
+        else {
+            panic!("expected PublicKeyResponse");
+        };
         assert_eq!(resp.key_id, "1");
         assert!(resp.sui_address.starts_with("0x"));
     }
@@ -433,8 +438,11 @@ mod tests {
         let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
         let params = json!({});
 
-        let result = handle_request(&mut handler, "keys", params).unwrap();
-        let resp: KeysResponse = serde_json::from_value(result).unwrap();
+        let JsonRpcResult::KeysResponse(resp) =
+            handle_request(&mut handler, "keys", params).unwrap()
+        else {
+            panic!("expected KeysResponse");
+        };
         assert_eq!(resp.keys.len(), 2);
     }
 
@@ -480,8 +488,12 @@ mod tests {
             "msg": tx_base64
         });
 
-        let result = handle_request(&mut handler, "sign", params).unwrap();
-        let resp: SignatureResponse = serde_json::from_value(result).unwrap();
+        let JsonRpcResult::SignatureResponse(resp) =
+            handle_request(&mut handler, "sign", params).unwrap()
+        else {
+            panic!("expected SignatureResponse");
+        };
+
         assert!(!resp.signature.is_empty());
     }
 
@@ -618,11 +630,13 @@ mod tests {
             });
 
         let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
-        let params = json!({});
 
-        let result = handle_request(&mut handler, "create_key", params).unwrap();
-        let resp: PublicKeyResponse = serde_json::from_value(result).unwrap();
-        assert_eq!(resp.key_id, "2");
+        let JsonRpcResult::PublicKeyResponse(key) =
+            handle_request(&mut handler, "keys", json!({})).unwrap()
+        else {
+            panic!("expected public key response");
+        };
+        assert_eq!(key.key_id, "2");
     }
 
     #[test]
