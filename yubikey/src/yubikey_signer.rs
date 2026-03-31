@@ -579,8 +579,17 @@ mod tests {
 
         execute(cli, Box::new(mock_device)).unwrap();
     }
+
     #[test]
-    fn test_handle_request_create() {
+    fn test_provision_mode_not_supported() {
+        let mock_device = MockSmartCard::new();
+        let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
+        let err = handle_request(&mut handler, "create_key", json!(null)).unwrap_err();
+        assert!(matches!(err, AppError::ProvisionModeNotSupported), "Should return provision mode not supported");
+    }
+
+    #[test]
+    fn test_handle_request_create_non_recoverable() {
         let mut mock_device = MockSmartCard::new();
 
         let should_succeed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -631,12 +640,74 @@ mod tests {
 
         let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
 
-        let JsonRpcResult::PublicKeyResponse(key) =
-            handle_request(&mut handler, "keys", json!({})).unwrap()
+        let JsonRpcResult::CreateKeyResponse(key) =
+            handle_request(&mut handler, "create_key", json!({ "mode": "NonRecoverable" })).unwrap()
         else {
-            panic!("expected public key response");
+            panic!("expected create key response");
         };
         assert_eq!(key.key_id, "2");
+        assert_eq!(key.mnemonic, None);
+    }
+
+    #[test]
+    fn test_handle_request_create_mnemonic_backed() {
+        let mut mock_device = MockSmartCard::new();
+
+        let should_succeed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let s = should_succeed.clone();
+
+        // R1 is used
+        mock_device
+            .expect_metadata()
+            .with(eq(SlotId::Retired(RetiredSlotId::R1)))
+            .returning(|_| {
+                Ok(DeviceMetadata {
+                    public_key: VALID_PUBKEY.to_vec(),
+                })
+            });
+
+        // R2 is initially unused (returns Err), then used (returns Ok)
+        mock_device
+            .expect_metadata()
+            .with(eq(SlotId::Retired(RetiredSlotId::R2)))
+            .returning(move |_| {
+                if s.load(std::sync::atomic::Ordering::SeqCst) {
+                    Ok(DeviceMetadata {
+                        public_key: VALID_PUBKEY.to_vec(),
+                    })
+                } else {
+                    Err(SignerError::SignatureFailed)
+                }
+            });
+
+        mock_device.expect_authenticate().returning(|_| Ok(()));
+
+        let s2 = should_succeed.clone();
+        mock_device
+            .expect_import_key()
+            .with(
+                eq(SlotId::Retired(RetiredSlotId::R2)),
+                always(),
+                always(),
+                always(),
+            )
+            .times(1)
+            .returning(move |_, _, _, _| {
+                s2.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(GeneratedKeyInfo {
+                    public_key: VALID_PUBKEY.to_vec(),
+                })
+            });
+
+        let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
+
+        let JsonRpcResult::CreateKeyResponse(key) =
+            handle_request(&mut handler, "create_key", json!({ "mode": "MnemonicBacked" })).unwrap()
+        else {
+            panic!("expected create key response");
+        };
+        assert_eq!(key.key_id, "2");
+        assert!(key.mnemonic.is_some());
     }
 
     #[test]
