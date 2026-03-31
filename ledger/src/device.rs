@@ -111,9 +111,13 @@ impl SuiDevice for LedgerHandle {
                 ));
             }
 
+            if rv == [0x00, 0x08] {
+                return Err(AppError::BlindSigningNotEnabled);
+            }
+
             if rv.len() < 3 {
                 return Err(AppError::DeviceConnection(
-                    "Invalid response from Ledger: too short".to_string(),
+                    format!("Unknown response from Ledger: {}", hex::encode(&rv))
                 ));
             }
 

@@ -162,7 +162,7 @@ pub async fn sign_transaction(
     // Build payloads array: [transaction_payload, bip32_key_payload]
     let payloads = vec![payload_txn, path_data];
 
-    let signature_data = match ledger
+    let signature_data = ledger
         .send_chunks(
             SUI_APP_CLA,
             SIGN_TRANSACTION_INS,
@@ -170,21 +170,7 @@ pub async fn sign_transaction(
             0x00, // P2
             payloads,
         )
-        .await
-    {
-        Ok(data) => data,
-        Err(e) => {
-            if e.to_string().contains("timeout") || e.to_string().contains("Timeout") {
-                return Err(AppError::DeviceTimeout);
-            } else if e.to_string().contains("6985") {
-                return Err(AppError::UserRejected);
-            } else {
-                return Err(AppError::SignatureFailed(format!(
-                    "Transaction signing failed: {e}"
-                )));
-            }
-        }
-    };
+        .await?;
 
     let pub_key_for_sig = ledger.sui_get_public_key(&derivation_path, false).await?;
     if pub_key_for_sig.is_empty() {

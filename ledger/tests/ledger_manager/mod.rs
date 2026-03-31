@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -17,14 +17,14 @@ lazy_static! {
 
 pub struct LedgerManager {
     client: Client,
-    blind_signing: bool,
+    blind_signing: Option<bool>,
 }
 
 impl LedgerManager {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
-            blind_signing: false,
+            blind_signing: None,
         }
     }
 
@@ -102,23 +102,29 @@ impl LedgerManager {
         Ok(())
     }
 
-    pub async fn enable_blind_signing(&mut self) -> Result<()> {
-        if self.blind_signing {
+    pub async fn set_blind_signing(&mut self, enabled: bool) -> Result<()> {
+        if Some(enabled) == self.blind_signing {
             return Ok(());
         }
 
         self.go_home().await?;
         self.go_settings().await?;
 
-        if self.assert_last_event("Enabled").await.is_ok() {
-            self.blind_signing = true;
-        } else {
-            self.send_keys(SendKey::Both).await?;
-            self.assert_last_event("Enabled").await?;
+        self.blind_signing = Some(enabled);
+        match (enabled, self.last_event().await?.text.as_str()) {
+            (false, "Enabled")  => {
+                self.send_keys(SendKey::Both).await?;
+                self.assert_last_event("Disabled").await?;
+                Ok(())
+            }
+            (true, "Disabled") => {
+                self.send_keys(SendKey::Both).await?;
+                self.assert_last_event("Enabled").await?;
+                Ok(())
+            }
+            (true, "Enabled") | (false, "Disabled") => Ok(()),
+            _ => Err(anyhow!("Unexpected blind signing menu text, expected Enabled or Disabled"))
         }
-
-        self.blind_signing = true;
-        Ok(())
     }
 
     pub async fn send_until_event(&self, key: SendKey, expected_text: &[&str]) -> Result<()> {

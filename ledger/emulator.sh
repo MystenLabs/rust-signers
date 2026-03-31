@@ -11,6 +11,7 @@ else
 fi
 
 CONTAINER_NAME="ledger-emulator"
+DEVICE="nanosp"
 
 start_emulator() {
     local detached=$1
@@ -35,9 +36,9 @@ start_emulator() {
         -p 9999:9999 \
         ghcr.io/ledgerhq/speculos \
         --seed "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
-        --model nanosp \
+        --model $DEVICE \
         --display headless \
-        apps/sui.elf
+        apps/$DEVICE
 }
 
 stop_emulator() {

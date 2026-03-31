@@ -23,6 +23,9 @@ pub enum AppError {
     /// Invalid derivation path format
     InvalidDerivationPath(String),
 
+    /// Blind signing not enabled
+    BlindSigningNotEnabled,
+
     /// Invalid transaction format
     InvalidTransaction(String),
 
@@ -63,6 +66,7 @@ impl fmt::Display for AppError {
                 f,
                 "Invalid derivation path '{path}': must be in format like 44'/784'/0'/0'/0'",
             ),
+            AppError::BlindSigningNotEnabled => write!(f, "Blind signing must be enabled"),
             AppError::InvalidTransaction(msg) => write!(f, "Invalid transaction: {msg}"),
             AppError::SignatureFailed(msg) => write!(f, "Signature operation failed: {msg}"),
             AppError::PublicKeyFailed(msg) => write!(f, "Public key retrieval failed: {msg}"),

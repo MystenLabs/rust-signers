@@ -9,6 +9,8 @@ use ledger_signer::{
 
 mod ledger_manager;
 use ledger_manager::LedgerManager;
+use anyhow::{anyhow, Result};
+use ledger_signer::errors::AppError;
 
 #[tokio::test]
 async fn test_get_test_connection() {
@@ -39,10 +41,10 @@ async fn test_get_public_key() {
 }
 
 #[tokio::test]
-async fn test_sign_transaction() {
+async fn test_sign_transaction() -> Result<()> {
     let mut mgr = LedgerManager::acquire().await;
 
-    mgr.enable_blind_signing().await.unwrap();
+    mgr.set_blind_signing(true).await.unwrap();
 
     let mut connection = get_tcp_connection(9999).await.unwrap();
     let derivation_path = get_derivation_path(0);
@@ -57,24 +59,60 @@ async fn test_sign_transaction() {
             mgr.accept_transaction().await
         }
     );
-    ledger_mgr_result.expect("Failed to accept transaction");
-    let signature = signature_result
-        .expect("Failed to sign transaction")
+    ledger_mgr_result?;
+    let signature = signature_result?
         .signature;
     assert!(!signature.is_empty(), "Signature should not be empty");
+    Ok(())
 }
 
+
 #[tokio::test]
-async fn test_enable_blind_signing() {
+async fn test_blind_sign_disabled() -> Result<()> {
     let mut mgr = LedgerManager::acquire().await;
-    // This test assumes the emulator is running and the app is open
-    mgr.enable_blind_signing()
-        .await
-        .expect("Failed to enable blind signing");
+    mgr.set_blind_signing(false).await?;
+
+    let mut connection = get_tcp_connection(9999).await.unwrap();
+    let derivation_path = get_derivation_path(0);
+
+    let message = "message";
+    let message = general_purpose::STANDARD.encode(message);
+
+    let (signature_result, _ledger_mgr_result) = tokio::join!(
+        sign_transaction(derivation_path, &message, &mut connection),
+        async {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            mgr.send_keys(ledger_manager::SendKey::Right).await.unwrap();
+            mgr.send_keys(ledger_manager::SendKey::Right).await.unwrap();
+        }
+    );
+
+    match signature_result {
+        Ok(_) => Err(anyhow!("Expected an error")),
+        Err(e) => match e {
+            AppError::BlindSigningNotEnabled => Ok(()),
+            _ => Err(anyhow!("Expected BlindSigningNotEnabled error, got: {e:?}"))
+        }
+    }
 }
 
 #[tokio::test]
-async fn test_go_home() {
+async fn test_set_blind_signing() -> Result<()>{
+    let mut mgr = LedgerManager::acquire().await;
+    // initial state
+    mgr.set_blind_signing(true).await?;
+    // true to true
+    mgr.set_blind_signing(true).await?;
+    // true to false
+    mgr.set_blind_signing(false).await?;
+    // false to false
+    mgr.set_blind_signing(false).await?;
+    // false to true
+    mgr.set_blind_signing(true).await
+}
+
+#[tokio::test]
+async fn test_go_home() -> Result<()> {
     let mgr = LedgerManager::acquire().await;
-    mgr.go_home().await.expect("Failed to go home");
+    mgr.go_home().await
 }

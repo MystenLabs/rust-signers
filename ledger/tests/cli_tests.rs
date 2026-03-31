@@ -62,7 +62,7 @@ async fn test_cli_keys() {
 #[tokio::test]
 async fn test_cli_sign() {
     let mut mgr = LedgerManager::acquire().await;
-    mgr.enable_blind_signing().await.unwrap();
+    mgr.set_blind_signing(true).await.unwrap();
 
     let message = "message";
     let message = general_purpose::STANDARD.encode(message);
