@@ -15,7 +15,13 @@ use zeroize::ZeroizeOnDrop;
 // Prints out Sui Signature
 // Requires Yubikey firmware > 5.3
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(
+    author,
+    version = env!("YUBIKEY_SIGNER_VERSION"),
+    long_version = env!("YUBIKEY_SIGNER_LONG_VERSION"),
+    about,
+    long_about = None
+)]
 #[command(propagate_version = true)]
 pub struct Cli {
     #[command(subcommand)]

@@ -8,6 +8,10 @@ use std::{
     panic,
 };
 
+const SIGNER_VERSION: &str = env!("LEDGER_SIGNER_VERSION");
+const SIGNER_GIT_REF: &str = env!("LEDGER_SIGNER_GIT_REF");
+const SIGNER_GIT_SHA: &str = env!("LEDGER_SIGNER_GIT_SHA");
+
 pub fn set_panic_hook(id: u64) {
     panic::set_hook(Box::new(move |info| {
         let payload = if let Some(payload) = info.payload().downcast_ref::<String>().or(info
@@ -46,7 +50,18 @@ pub fn set_panic_hook(id: u64) {
 }
 
 pub fn check_subcommand() {
-    if std::env::args().nth(1).as_deref() != Some("call") {
+    let subcommand = std::env::args().nth(1);
+    let subcommand = subcommand.as_deref();
+    // return version on version
+    if subcommand == Some("--version") {
+        println!(
+            "ledger-signer {} ({} {})",
+            SIGNER_VERSION, SIGNER_GIT_REF, SIGNER_GIT_SHA
+        );
+        std::process::exit(0);
+    }
+
+    if subcommand != Some("call") {
         return_error("Invalid subcommand. Use 'call' to invoke the CLI.", 0);
         std::process::exit(1);
     }
