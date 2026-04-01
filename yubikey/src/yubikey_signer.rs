@@ -591,7 +591,17 @@ mod tests {
         let mock_device = MockSmartCard::new();
         let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
         let err = handle_request(&mut handler, "create_key", json!(null)).unwrap_err();
-        assert!(matches!(err, AppError::ProvisionModeNotSupported), "Should return provision mode not supported");
+        assert!(
+            matches!(err, AppError::ProvisionModeNotSupported),
+            "Should return provision mode not supported"
+        );
+
+        let rpc_error: signer_types::JsonRpcErrorObject = (&err).into();
+        assert_eq!(rpc_error.code, -32602);
+        assert_eq!(
+            rpc_error.message,
+            "Provision mode is not supported by yubikey-signer"
+        );
     }
 
     #[test]
