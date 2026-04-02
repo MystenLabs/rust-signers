@@ -1,8 +1,9 @@
 use crate::ledger;
 use crate::path::get_derivation_path;
 use crate::types::*;
-use anyhow::{Context, anyhow};
+use crate::errors::{AppError, AppResult};
 use serde_json::{Value, json};
+use signer_types::JsonRpcErrorObject;
 use std::{
     io::{BufRead, Write, stdout},
     panic,
@@ -62,7 +63,13 @@ pub fn check_subcommand() {
     }
 
     if subcommand != Some("call") {
-        return_error("Invalid subcommand. Use 'call' to invoke the CLI.", 0);
+        return_error(
+            JsonRpcErrorObject {
+                code: -32601,
+                message: "Invalid subcommand. Use 'call' to invoke the CLI.".to_string(),
+            },
+            0,
+        );
         std::process::exit(1);
     }
 }
@@ -70,16 +77,17 @@ pub fn check_subcommand() {
 pub async fn run_cli<R: BufRead>(
     buf_reader: R,
     ledger_conn_type: ledger::ConnectionType,
-) -> Result<Value, (anyhow::Error, u64)> {
+) -> Result<Value, (AppError, u64)> {
     let JsonRpcRequest {
         jsonrpc: _,
         method,
         params,
         id,
-    } = read_json_line(buf_reader).expect("Unable to deserialize request");
+    } = read_json_line(buf_reader)
+        .map_err(|e| (AppError::SerializationError(format!("Unable to deserialize request: {e}")), 0))?;
 
     if method.is_empty() {
-        return Err((anyhow::anyhow!("Method is required"), id));
+        return Err((AppError::JsonRpcMethodNotFound("<empty>".to_string()), id));
     }
 
     serde_json::to_value(JsonRpcSuccess {
@@ -89,31 +97,45 @@ pub async fn run_cli<R: BufRead>(
             .map_err(|e| (e, id))?,
         id,
     })
-    .map_err(|e| (anyhow::anyhow!("Failed to serialize response: {}", e), id))
+    .map_err(|e| {
+        (
+            AppError::SerializationError(format!("Failed to serialize response: {e}")),
+            id,
+        )
+    })
 }
 
 pub async fn handle_request(
     method: &str,
     params: Value,
     ledger_conn_type: ledger::ConnectionType,
-) -> Result<Value, anyhow::Error> {
+) -> AppResult<Value> {
     match method {
-        "create_key" => Err(anyhow!("create_key command is not implemented yet")),
-        "sign_hashed" => Err(anyhow!("sign_hashed command is not supported")),
+        "create_key" => Err(AppError::UnsupportedMethod("create_key".to_string())),
+        "sign_hashed" => Err(AppError::UnsupportedMethod("sign_hashed".to_string())),
         "sign" => {
             let mut ledger_conn = ledger::get_connection(ledger_conn_type).await?;
 
-            let args: SignParams =
-                serde_json::from_value(params).context("Failed to deserialize sign params")?;
+            let args: SignParams = serde_json::from_value(params).map_err(|e| {
+                AppError::SerializationError(format!("Failed to deserialize sign params: {e}"))
+            })?;
             if args.key_id.is_empty() {
-                Err(anyhow!("key id is required"))
+                Err(AppError::InvalidDerivationPath(
+                    "key id is required".to_string(),
+                ))
             } else if args.msg.is_empty() {
-                Err(anyhow!("base64 encoded message to sign is required"))
+                Err(AppError::InvalidTransaction(
+                    "base64 encoded message to sign is required".to_string(),
+                ))
             } else {
                 Ok(serde_json::to_value(
                     ledger::sign_transaction(args.key_id, &args.msg, &mut ledger_conn).await?,
                 )
-                .context("Unable to serialize sign transaction response")?)
+                .map_err(|e| {
+                    AppError::SerializationError(format!(
+                        "Unable to serialize sign transaction response: {e}"
+                    ))
+                })?)
             }
         }
         "keys" => {
@@ -125,30 +147,33 @@ pub async fn handle_request(
 
                 keys.push(ledger::get_public_key(&derivation_path, &mut ledger_conn.0).await?)
             }
-            Ok(serde_json::to_value(KeysResponse { keys })?)
+            Ok(serde_json::to_value(KeysResponse { keys }).map_err(|e| {
+                AppError::SerializationError(format!("Failed to serialize keys response: {e}"))
+            })?)
         }
         "public_key" => {
             let mut ledger_conn = ledger::get_connection(ledger_conn_type).await?;
 
-            let args = serde_json::from_value::<PublicKeyParams>(params)
-                .context("Failed to deserialize public_key params")?;
+            let args = serde_json::from_value::<PublicKeyParams>(params).map_err(|e| {
+                AppError::SerializationError(format!("Failed to deserialize public_key params: {e}"))
+            })?;
             Ok(serde_json::to_value(
                 ledger::get_public_key(&args.key_id, &mut ledger_conn.0).await?,
-            )?)
+            )
+            .map_err(|e| {
+                AppError::SerializationError(format!("Failed to serialize public key response: {e}"))
+            })?)
         }
-        _ => Err(anyhow!("Invalid method: {}", method)),
+        _ => Err(AppError::JsonRpcMethodNotFound(method.to_string())),
     }
 }
 
-pub fn return_error(message: &str, id: u64) {
+pub fn return_error(error: JsonRpcErrorObject, id: u64) {
     println!(
         "{}",
         json!({
             "jsonrpc": "2.0",
-            "error": {
-                "code": 1,
-                "message": message,
-            },
+            "error": error,
             "id": id,
         })
     );

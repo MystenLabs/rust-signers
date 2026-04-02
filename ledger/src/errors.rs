@@ -1,10 +1,17 @@
 use serde::{Deserialize, Serialize};
+use signer_types::JsonRpcErrorObject;
 use std::fmt;
 
 /// Custom error type for the Ledger Signer application
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "details")]
 pub enum AppError {
+    /// JSON-RPC method is not implemented by this signer
+    UnsupportedMethod(String),
+
+    /// JSON-RPC method name is invalid or unknown
+    JsonRpcMethodNotFound(String),
+
     /// Ledger device connection errors
     DeviceConnection(String),
 
@@ -51,6 +58,10 @@ pub enum AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            AppError::UnsupportedMethod(method) => {
+                write!(f, "{method} is not supported by ledger-signer")
+            }
+            AppError::JsonRpcMethodNotFound(method) => write!(f, "Invalid method: {method}"),
             AppError::DeviceConnection(msg) => write!(f, "Device connection error: {msg}"),
             AppError::DeviceNotFound => write!(
                 f,
@@ -84,6 +95,29 @@ impl std::error::Error for AppError {}
 
 /// Type alias for Results in this application
 pub type AppResult<T> = Result<T, AppError>;
+
+impl From<&AppError> for JsonRpcErrorObject {
+    fn from(err: &AppError) -> Self {
+        match err {
+            AppError::UnsupportedMethod(_) | AppError::JsonRpcMethodNotFound(_) => {
+                JsonRpcErrorObject {
+                    code: -32601,
+                    message: err.to_string(),
+                }
+            }
+            AppError::InvalidDerivationPath(_)
+            | AppError::InvalidTransaction(_)
+            | AppError::SerializationError(_) => JsonRpcErrorObject {
+                code: -32602,
+                message: err.to_string(),
+            },
+            _ => JsonRpcErrorObject {
+                code: -32603,
+                message: err.to_string(),
+            },
+        }
+    }
+}
 
 // Conversion implementations for common error types
 

@@ -7,6 +7,7 @@ pub mod path;
 pub mod types;
 
 use crate::cli::{return_error, run_cli, set_panic_hook};
+use signer_types::JsonRpcErrorObject;
 use std::io;
 use std::io::stdin;
 
@@ -22,7 +23,8 @@ pub async fn main() {
     match run_cli(buf_reader, ledger::ConnectionType::Auto).await {
         Ok(result) => println!("{}", serde_json::to_string(&result).unwrap()),
         Err((e, id)) => {
-            return_error(&e.to_string(), id);
+            let error: JsonRpcErrorObject = (&e).into();
+            return_error(error, id);
         }
     }
 }

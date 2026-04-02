@@ -1,6 +1,7 @@
 use base64::Engine;
 use base64::engine::general_purpose;
 use ledger_signer::cli::run_cli;
+use ledger_signer::errors::AppError;
 use serde_json::json;
 use std::io::Cursor;
 
@@ -28,8 +29,30 @@ async fn test_cli_bad_method() {
     let result = run_cli(cursor, connection_type).await;
 
     assert!(result.is_err());
-    let error = result.unwrap_err();
-    assert!(error.0.to_string().contains("Invalid method: bad_method"));
+    let error = result.unwrap_err().0;
+    let rpc_error: signer_types::JsonRpcErrorObject = (&error).into();
+    assert!(matches!(error, AppError::JsonRpcMethodNotFound(_)));
+    assert_eq!(rpc_error.code, -32601);
+    assert_eq!(rpc_error.message, "Invalid method: bad_method");
+}
+
+#[tokio::test]
+async fn test_cli_create_key_not_supported() {
+    let _mgr = LedgerManager::acquire().await;
+    let input = r#"{"jsonrpc":"2.0","method":"create_key","params":{},"id":1}"#;
+    let cursor = Cursor::new(input);
+    let connection_type = ledger::ConnectionType::Tcp(9999);
+    let result = run_cli(cursor, connection_type).await;
+
+    assert!(result.is_err());
+    let error = result.unwrap_err().0;
+    let rpc_error: signer_types::JsonRpcErrorObject = (&error).into();
+    assert!(matches!(error, AppError::UnsupportedMethod(_)));
+    assert_eq!(rpc_error.code, -32601);
+    assert_eq!(
+        rpc_error.message,
+        "create_key is not supported by ledger-signer"
+    );
 }
 
 #[tokio::test]
