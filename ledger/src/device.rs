@@ -107,7 +107,7 @@ impl SuiDevice for LedgerHandle {
 
             if rv == [0x55, 0x15] {
                 return Err(AppError::InvalidDerivationPath(
-                    "Ledger: Bad derivation path".to_string(),
+                    "Ledger: device is locked".to_string(),
                 ));
             }
 
