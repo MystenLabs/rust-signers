@@ -2,14 +2,30 @@
 
 EXPERIMENTAL: This is an experimental implementation of a Yubikey signer for Sui. It is not yet ready for production use. Not recommended for use in production.
 
+Yubikey external signer support requires Sui CLI version 1.66.2 or newer.
+
 ## Install the Signer
 
-Add this repo to your local `PATH` and cargo install or optionally install from releases.
+You can install `yubikey-signer` with `suiup`, from the GitHub Releases page, or build it from source.
+
+### Install with `suiup`
 
 ```bash
-git clone git@github.com:MystenLabs/rust-signer.git
+suiup install yubikey-signer
+```
+
+### Install from releases
+
+Download the latest `yubikey-signer` binary from the [releases page](https://github.com/MystenLabs/rust-signers/releases) and ensure it is available on your `PATH`.
+
+### Build from source
+
+Make sure you have Rust installed on your system, which you can do using [rustup](https://rustup.rs/).
+
+```bash
+git clone git@github.com:MystenLabs/rust-signers.git
 cd rust-signers
-cargo install --path yubikey
+cargo install --path yubikey # installs `yubikey-signer` binary
 ```
 
 ## Yubikey CLI Commands
