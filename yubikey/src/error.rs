@@ -1,5 +1,7 @@
 use signer_types::JsonRpcErrorObject;
 
+pub(crate) const PROVISION_MODE_NOT_SUPPORTED_ERROR_CODE: i64 = -32012;
+
 #[derive(thiserror::Error, Debug)]
 pub enum AppError {
     #[error(transparent)]
@@ -105,7 +107,7 @@ impl From<&AppError> for JsonRpcErrorObject {
                 message: error.to_string(),
             },
             AppError::ProvisionModeNotSupported => JsonRpcErrorObject {
-                code: -32602,
+                code: PROVISION_MODE_NOT_SUPPORTED_ERROR_CODE,
                 message: error.to_string(),
             },
             AppError::RecoveryPhraseRevealRequired

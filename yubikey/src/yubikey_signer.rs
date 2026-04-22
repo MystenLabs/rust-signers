@@ -242,6 +242,7 @@ pub fn secp256r1_key_bytes(kp: SuiKeyPair) -> Result<Vec<u8>, SignerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::PROVISION_MODE_NOT_SUPPORTED_ERROR_CODE;
     use crate::jsonrpc::{handle_request, process_call_command};
     use crate::yubikey_handler::{DeviceMetadata, GeneratedKeyInfo, MockSmartCard};
 
@@ -597,7 +598,7 @@ mod tests {
         );
 
         let rpc_error: signer_types::JsonRpcErrorObject = (&err).into();
-        assert_eq!(rpc_error.code, -32602);
+        assert_eq!(rpc_error.code, PROVISION_MODE_NOT_SUPPORTED_ERROR_CODE);
         assert_eq!(
             rpc_error.message,
             "Provision mode is not supported by yubikey-signer"
