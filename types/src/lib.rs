@@ -49,16 +49,20 @@ pub struct PublicKeyParams {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
+#[serde(rename_all = "kebab-case")]
 /// Provision modes for key creation. `Recoverable` mode allows for key recovery using a backup, while `Device` mode creates a key that is tied to the device and cannot be recovered if lost.
 pub enum ProvisionMode {
     /// Creates a recoverable key without revealing a recovery phrase in this flow,
     /// because backup is assumed to be handled by the signer at setup time or key creation time.
     /// Signers should error if this is not a valid assumption.
     #[default]
+    #[serde(alias = "RecoverableAssumed")]
     RecoverableAssumed,
     /// Creates a recoverable key and reveals the recovery phrase in this flow, allowing the user to back up the key immediately.
+    #[serde(alias = "MnemonicBacked")]
     MnemonicBacked,
     /// User has explicitly asked to generate a key on a device with no backup
+    #[serde(alias = "NonRecoverable")]
     NonRecoverable,
 }
 

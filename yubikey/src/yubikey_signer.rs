@@ -248,7 +248,7 @@ mod tests {
 
     use mockall::predicate::*;
     use serde_json::json;
-    use signer_types::JsonRpcResult;
+    use signer_types::{CreateKeyParams, JsonRpcResult, ProvisionMode};
     use yubikey::piv::{AlgorithmId, RetiredSlotId, SlotId};
     use yubikey::{PinPolicy, TouchPolicy};
 
@@ -657,9 +657,12 @@ mod tests {
 
         let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
 
-        let JsonRpcResult::CreateKeyResponse(key) =
-            handle_request(&mut handler, "create_key", json!({ "mode": "NonRecoverable" })).unwrap()
-        else {
+        let JsonRpcResult::CreateKeyResponse(key) = handle_request(
+            &mut handler,
+            "create_key",
+            json!({ "mode": "non-recoverable" }),
+        )
+        .unwrap() else {
             panic!("expected create key response");
         };
         assert_eq!(key.key_id, "2");
@@ -718,13 +721,23 @@ mod tests {
 
         let mut handler = YubiKeyHandler::new_with_device(Box::new(mock_device), false);
 
-        let JsonRpcResult::CreateKeyResponse(key) =
-            handle_request(&mut handler, "create_key", json!({ "mode": "MnemonicBacked" })).unwrap()
-        else {
+        let JsonRpcResult::CreateKeyResponse(key) = handle_request(
+            &mut handler,
+            "create_key",
+            json!({ "mode": "mnemonic-backed" }),
+        )
+        .unwrap() else {
             panic!("expected create key response");
         };
         assert_eq!(key.key_id, "2");
         assert!(key.mnemonic.is_some());
+    }
+
+    #[test]
+    fn test_provision_mode_accepts_pascal_case_alias() {
+        let params = serde_json::from_value::<CreateKeyParams>(json!({ "mode": "MnemonicBacked" }));
+
+        assert_eq!(params.unwrap().mode, ProvisionMode::MnemonicBacked);
     }
 
     #[test]
