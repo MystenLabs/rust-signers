@@ -25,7 +25,7 @@ fn run(cli: Cli, is_jsonrpc_call: bool) -> Result<(), AppError> {
     let device = match build_device() {
         Ok(d) => d,
         Err(e) if is_jsonrpc_call => {
-            return_error((&AppError::YubikeyUnavailable).into(), 0);
+            return_error((&AppError::YubikeyUnavailable).into(), None);
             return Err(e);
         }
         Err(e) => return Err(e),

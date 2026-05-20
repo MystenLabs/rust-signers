@@ -1,4 +1,3 @@
-use std::fs::read;
 use crate::error::{AppError, SignerError};
 use crate::yubikey_handler::{from_slot_input, parse_slot, resolve_pin, YubiKeyHandler};
 use crate::yubikey_signer::secp256r1_key_bytes;
@@ -27,14 +26,14 @@ pub(crate) fn process_call_command<R: BufRead>(
                 target: "JsonRpcRequest",
                 source: e,
             };
-            return_error((&app_err).into(), 0);
+            return_error((&app_err).into(), None);
             return Err(app_err);
         }
     };
 
     if method.is_empty() {
         let error = AppError::JsonRpcMethodRequired;
-        return_error((&error).into(), id);
+        return_error((&error).into(), Some(id));
         return Err(error);
     }
 
@@ -49,7 +48,7 @@ pub(crate) fn process_call_command<R: BufRead>(
             Ok(())
         }
         Err(error) => {
-            return_error((&error).into(), id);
+            return_error((&error).into(), Some(id));
             Err(error)
         }
     }
@@ -165,7 +164,7 @@ fn read_json_line<R: BufRead>(mut buf_reader: R) -> Result<JsonRpcRequest, serde
     serde_json::from_str(&input)
 }
 
-pub(crate) fn return_error(error: JsonRpcErrorObject, id: u64) {
+pub(crate) fn return_error(error: JsonRpcErrorObject, id: Option<u64>) {
     println!(
         "{}",
         JsonRpcFailure {

@@ -28,7 +28,7 @@ pub struct JsonRpcSuccess {
 pub struct JsonRpcFailure {
     pub jsonrpc: String,
     pub error: JsonRpcErrorObject,
-    pub id: u64,
+    pub id: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
