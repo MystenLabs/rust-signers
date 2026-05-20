@@ -157,7 +157,7 @@ fn read_json_line<R: BufRead>(mut buf_reader: R) -> Result<JsonRpcRequest, serde
     serde_json::from_str(&input)
 }
 
-fn return_error(error: JsonRpcErrorObject, id: u64) {
+pub(crate) fn return_error(error: JsonRpcErrorObject, id: u64) {
     println!(
         "{}",
         JsonRpcFailure {

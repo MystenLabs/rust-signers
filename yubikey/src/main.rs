@@ -3,6 +3,7 @@ mod jsonrpc;
 mod yubikey_handler;
 mod yubikey_signer;
 use crate::error::{AppError, SignerError};
+use crate::jsonrpc::return_error;
 use crate::yubikey_handler::device::RealSmartCard;
 use crate::yubikey_handler::SmartCard;
 use crate::yubikey_signer::{Cli, Commands};
@@ -12,7 +13,7 @@ fn main() {
     let cli = Cli::parse();
     let is_jsonrpc_call = matches!(&cli.command, Commands::Call);
 
-    if let Err(error) = run(cli) {
+    if let Err(error) = run(cli, is_jsonrpc_call) {
         if !is_jsonrpc_call {
             eprintln!("{error:#}");
             std::process::exit(exit_code(error.exit_kind()));
@@ -20,8 +21,15 @@ fn main() {
     }
 }
 
-fn run(cli: Cli) -> Result<(), AppError> {
-    let device = build_device()?;
+fn run(cli: Cli, is_jsonrpc_call: bool) -> Result<(), AppError> {
+    let device = match build_device() {
+        Ok(d) => d,
+        Err(e) if is_jsonrpc_call => {
+            return_error((&AppError::YubikeyUnavailable).into(), 0);
+            return Err(e);
+        }
+        Err(e) => return Err(e),
+    };
     yubikey_signer::execute(cli, device)
 }
 

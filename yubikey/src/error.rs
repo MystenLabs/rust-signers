@@ -28,6 +28,9 @@ pub enum AppError {
     #[error("Recovery phrase reveal is only supported for recoverable mode")]
     PhraseRevealRequiresRecoverable,
 
+    #[error("YubiKey Device unavailable")]
+    YubikeyUnavailable,
+
     #[error("Serde Error: {0}")]
     SerdeError(#[from] serde_json::Error),
 
@@ -110,11 +113,12 @@ impl From<&AppError> for JsonRpcErrorObject {
                 code: PROVISION_MODE_NOT_SUPPORTED_ERROR_CODE,
                 message: error.to_string(),
             },
-            AppError::RecoveryPhraseRevealRequired
-            | AppError::PhraseRevealRequiresRecoverable => JsonRpcErrorObject {
-                code: -32602,
-                message: error.to_string(),
-            },
+            AppError::RecoveryPhraseRevealRequired | AppError::PhraseRevealRequiresRecoverable => {
+                JsonRpcErrorObject {
+                    code: -32602,
+                    message: error.to_string(),
+                }
+            }
             AppError::SerdeError(e) => JsonRpcErrorObject {
                 code: -32603,
                 message: format!("Serde error: {}", e),
@@ -122,6 +126,10 @@ impl From<&AppError> for JsonRpcErrorObject {
             AppError::Deserialize { target, source } => JsonRpcErrorObject {
                 code: -32602,
                 message: format!("Failed to deserialize {}: {}", target, source),
+            },
+            AppError::YubikeyUnavailable => JsonRpcErrorObject {
+                code: -32603,
+                message: error.to_string(),
             },
         }
     }
