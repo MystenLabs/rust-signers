@@ -1,3 +1,4 @@
+use std::fs::read;
 use crate::error::{AppError, SignerError};
 use crate::yubikey_handler::{from_slot_input, parse_slot, resolve_pin, YubiKeyHandler};
 use crate::yubikey_signer::secp256r1_key_bytes;
@@ -19,10 +20,17 @@ pub(crate) fn process_call_command<R: BufRead>(
         method,
         params,
         id,
-    } = read_json_line(buf_reader).map_err(|e| AppError::Deserialize {
-        target: "JsonRpcRequest",
-        source: e,
-    })?;
+    } = match read_json_line(buf_reader) {
+        Ok(resp) => resp,
+        Err(e) => {
+            let app_err = AppError::Deserialize {
+                target: "JsonRpcRequest",
+                source: e,
+            };
+            return_error((&app_err).into(), 0);
+            return Err(app_err);
+        }
+    };
 
     if method.is_empty() {
         let error = AppError::JsonRpcMethodRequired;
