@@ -1,11 +1,14 @@
 use serde::{Deserialize, Serialize};
-use signer_types::JsonRpcErrorObject;
+use signer_types::{CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE, JsonRpcErrorObject};
 use std::fmt;
 
 /// Custom error type for the Ledger Signer application
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "details")]
 pub enum AppError {
+    /// Ledger devices cannot create keys through this signer, but users can select existing keys
+    CreateKeyUnsupportedUseExisting,
+
     /// JSON-RPC method is not implemented by this signer
     UnsupportedMethod(String),
 
@@ -58,6 +61,9 @@ pub enum AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            AppError::CreateKeyUnsupportedUseExisting => {
+                write!(f, "create_key is not supported; use an existing key")
+            }
             AppError::UnsupportedMethod(method) => {
                 write!(f, "{method} is not supported by ledger-signer")
             }
@@ -99,6 +105,10 @@ pub type AppResult<T> = Result<T, AppError>;
 impl From<&AppError> for JsonRpcErrorObject {
     fn from(err: &AppError) -> Self {
         match err {
+            AppError::CreateKeyUnsupportedUseExisting => JsonRpcErrorObject {
+                code: CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE,
+                message: err.to_string(),
+            },
             AppError::UnsupportedMethod(_) | AppError::JsonRpcMethodNotFound(_) => {
                 JsonRpcErrorObject {
                     code: -32601,
@@ -227,6 +237,12 @@ mod tests {
 
     #[test]
     fn test_error_display() {
+        let err = AppError::CreateKeyUnsupportedUseExisting;
+        assert_eq!(
+            err.to_string(),
+            "create_key is not supported; use an existing key"
+        );
+
         let err = AppError::DeviceNotFound;
         assert_eq!(
             err.to_string(),
@@ -254,6 +270,23 @@ mod tests {
         assert!(json.contains("Test message"));
         // Status is serialized as decimal, not hex
         assert!(json.contains("27013")); // 0x6985 in decimal
+    }
+
+    #[test]
+    fn test_json_rpc_error_codes() {
+        let rpc_error: JsonRpcErrorObject = (&AppError::CreateKeyUnsupportedUseExisting).into();
+        assert_eq!(
+            rpc_error.code,
+            CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE
+        );
+
+        let rpc_error: JsonRpcErrorObject =
+            (&AppError::UnsupportedMethod("sign_hashed".to_string())).into();
+        assert_eq!(rpc_error.code, -32601);
+
+        let rpc_error: JsonRpcErrorObject =
+            (&AppError::JsonRpcMethodNotFound("bad_method".to_string())).into();
+        assert_eq!(rpc_error.code, -32601);
     }
 
     #[test]
