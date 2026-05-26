@@ -8,8 +8,8 @@ use ledger_signer::{
 };
 
 mod ledger_manager;
+use anyhow::{Result, anyhow};
 use ledger_manager::LedgerManager;
-use anyhow::{anyhow, Result};
 use ledger_signer::errors::AppError;
 
 #[tokio::test]
@@ -60,12 +60,10 @@ async fn test_sign_transaction() -> Result<()> {
         }
     );
     ledger_mgr_result?;
-    let signature = signature_result?
-        .signature;
+    let signature = signature_result?.signature;
     assert!(!signature.is_empty(), "Signature should not be empty");
     Ok(())
 }
-
 
 #[tokio::test]
 async fn test_blind_sign_disabled() -> Result<()> {
@@ -91,13 +89,13 @@ async fn test_blind_sign_disabled() -> Result<()> {
         Ok(_) => Err(anyhow!("Expected an error")),
         Err(e) => match e {
             AppError::BlindSigningNotEnabled => Ok(()),
-            _ => Err(anyhow!("Expected BlindSigningNotEnabled error, got: {e:?}"))
-        }
+            _ => Err(anyhow!("Expected BlindSigningNotEnabled error, got: {e:?}")),
+        },
     }
 }
 
 #[tokio::test]
-async fn test_set_blind_signing() -> Result<()>{
+async fn test_set_blind_signing() -> Result<()> {
     let mut mgr = LedgerManager::acquire().await;
     // initial state
     mgr.set_blind_signing(true).await?;
