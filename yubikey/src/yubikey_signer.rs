@@ -476,7 +476,7 @@ mod tests {
             ObjectDigest::new([0; 32]),
         )];
         let tx_data = TransactionData::new_programmable(sender, gas_payment, pt, 1000, 1);
-        let tx_base64 = Base64::encode(&bcs::to_bytes(&tx_data).unwrap());
+        let tx_base64 = Base64::encode(bcs::to_bytes(&tx_data).unwrap());
 
         mock_device.expect_sign_data().returning(|_, _, _| {
             Ok(vec![

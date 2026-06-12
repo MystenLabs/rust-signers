@@ -116,9 +116,10 @@ impl SuiDevice for LedgerHandle {
             }
 
             if rv.len() < 3 {
-                return Err(AppError::DeviceConnection(
-                    format!("Unknown response from Ledger: {}", hex::encode(&rv))
-                ));
+                return Err(AppError::DeviceConnection(format!(
+                    "Unknown response from Ledger: {}",
+                    hex::encode(&rv)
+                )));
             }
 
             let rv_instruction = rv[0];

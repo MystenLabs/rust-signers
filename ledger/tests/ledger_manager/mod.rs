@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -112,7 +112,7 @@ impl LedgerManager {
 
         self.blind_signing = Some(enabled);
         match (enabled, self.last_event().await?.text.as_str()) {
-            (false, "Enabled")  => {
+            (false, "Enabled") => {
                 self.send_keys(SendKey::Both).await?;
                 self.assert_last_event("Disabled").await?;
                 Ok(())
@@ -123,7 +123,9 @@ impl LedgerManager {
                 Ok(())
             }
             (true, "Enabled") | (false, "Disabled") => Ok(()),
-            _ => Err(anyhow!("Unexpected blind signing menu text, expected Enabled or Disabled"))
+            _ => Err(anyhow!(
+                "Unexpected blind signing menu text, expected Enabled or Disabled"
+            )),
         }
     }
 

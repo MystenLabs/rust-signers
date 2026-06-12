@@ -1,7 +1,7 @@
+use crate::errors::{AppError, AppResult};
 use crate::ledger;
 use crate::path::get_derivation_path;
 use crate::types::*;
-use crate::errors::{AppError, AppResult};
 use serde_json::{Value, json};
 use signer_types::JsonRpcErrorObject;
 use std::{
@@ -83,8 +83,12 @@ pub async fn run_cli<R: BufRead>(
         method,
         params,
         id,
-    } = read_json_line(buf_reader)
-        .map_err(|e| (AppError::SerializationError(format!("Unable to deserialize request: {e}")), 0))?;
+    } = read_json_line(buf_reader).map_err(|e| {
+        (
+            AppError::SerializationError(format!("Unable to deserialize request: {e}")),
+            0,
+        )
+    })?;
 
     if method.is_empty() {
         return Err((AppError::JsonRpcMethodNotFound("<empty>".to_string()), id));
@@ -155,13 +159,17 @@ pub async fn handle_request(
             let mut ledger_conn = ledger::get_connection(ledger_conn_type).await?;
 
             let args = serde_json::from_value::<PublicKeyParams>(params).map_err(|e| {
-                AppError::SerializationError(format!("Failed to deserialize public_key params: {e}"))
+                AppError::SerializationError(format!(
+                    "Failed to deserialize public_key params: {e}"
+                ))
             })?;
             Ok(serde_json::to_value(
                 ledger::get_public_key(&args.key_id, &mut ledger_conn.0).await?,
             )
             .map_err(|e| {
-                AppError::SerializationError(format!("Failed to serialize public key response: {e}"))
+                AppError::SerializationError(format!(
+                    "Failed to serialize public key response: {e}"
+                ))
             })?)
         }
         _ => Err(AppError::JsonRpcMethodNotFound(method.to_string())),
