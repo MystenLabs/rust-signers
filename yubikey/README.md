@@ -51,9 +51,9 @@ Options:
 
 ## Add A Key to Sui CLI
 
-First ensure your YubiKey is connected, and you have generated a key on it using the `generate-key` command.
+First, ensure your YubiKey is connected.
 
-Then run:
+If you already have a key on the YubiKey, list the available keys and add the key you want to use:
 
 ```bash
 sui external-keys list-keys yubikey-signer
@@ -62,10 +62,27 @@ sui external-keys list-keys yubikey-signer
 # │ suiAddress│ 0x...                                                                                        │
 # ...
 
-sui external-keys add-existing "key-id-or-path" yubikey-signer
-# OR
-# This will attempt to use the first available retired slot, however it is not always possible to detect which slots are in use.
-sui external-keys generate yubikey-signer
+sui external-keys add-existing [slot] yubikey-signer
+```
+
+You can also ask Sui CLI to create a new key through the signer. YubiKey supports two explicit provision modes:
+
+```bash
+# Generate a non-recoverable key directly on the YubiKey.
+# This uses the first available retired slot and does not produce a backup, useful for testing or in certain multi-signature scenarios.
+sui external-keys generate --provision-mode non-recoverable yubikey-signer
+
+# Generate a mnemonic, import the derived secp256r1 key into the YubiKey,
+# and return the mnemonic so it can be backed up immediately.
+sui external-keys generate --provision-mode mnemonic-backed yubikey-signer
+```
+
+`recoverable-assumed` is not supported by `yubikey-signer`. YubiKey-generated PIV private keys cannot be exported, and the YubiKey does not automatically back them up. A plain `sui external-keys generate yubikey-signer` uses the Sui CLI default provision mode and will fail without a supported `--provision-mode` option.
+
+To create a key in a specific retired slot before adding it to Sui CLI, use the standalone signer command:
+
+```bash
+yubikey-signer generate-key --slot 1
 ```
 
 ## Use the Key
