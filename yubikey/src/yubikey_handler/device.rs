@@ -10,7 +10,7 @@ use signer_types::*;
 use sui_types::crypto::SignatureScheme;
 use sui_types::transaction::TransactionData;
 use tracing::info;
-use yubikey::piv::{generate, sign_data, AlgorithmId, SlotId};
+use yubikey::piv::{generate, sign_data, AlgorithmId, RetiredSlotId, SlotId};
 use yubikey::{MgmKey, PinPolicy, TouchPolicy, YubiKey};
 
 pub struct RealSmartCard {
@@ -117,6 +117,39 @@ pub struct YubiKeyHandler {
     verbose: bool,
 }
 
+fn slot_description(slot: SlotId) -> &'static str {
+    match slot {
+        SlotId::Authentication => "authentication slot",
+        SlotId::Signature => "signature slot",
+        SlotId::KeyManagement => "key management slot",
+        SlotId::CardAuthentication => "card authentication slot",
+        SlotId::Attestation => "attestation slot",
+        SlotId::Management(_) => "management slot",
+        SlotId::Retired(retired_slot) => match retired_slot {
+            RetiredSlotId::R1 => "slot 1",
+            RetiredSlotId::R2 => "slot 2",
+            RetiredSlotId::R3 => "slot 3",
+            RetiredSlotId::R4 => "slot 4",
+            RetiredSlotId::R5 => "slot 5",
+            RetiredSlotId::R6 => "slot 6",
+            RetiredSlotId::R7 => "slot 7",
+            RetiredSlotId::R8 => "slot 8",
+            RetiredSlotId::R9 => "slot 9",
+            RetiredSlotId::R10 => "slot 10",
+            RetiredSlotId::R11 => "slot 11",
+            RetiredSlotId::R12 => "slot 12",
+            RetiredSlotId::R13 => "slot 13",
+            RetiredSlotId::R14 => "slot 14",
+            RetiredSlotId::R15 => "slot 15",
+            RetiredSlotId::R16 => "slot 16",
+            RetiredSlotId::R17 => "slot 17",
+            RetiredSlotId::R18 => "slot 18",
+            RetiredSlotId::R19 => "slot 19",
+            RetiredSlotId::R20 => "slot 20",
+        },
+    }
+}
+
 impl YubiKeyHandler {
     pub fn new_with_device(device: Box<dyn SmartCard>, verbose: bool) -> Self {
         Self { device, verbose }
@@ -139,7 +172,7 @@ impl YubiKeyHandler {
         }
 
         if self.verbose {
-            println!("Importing Key on {:?}", slot);
+            println!("Importing Key on {}", slot_description(slot));
         }
 
         let key_info = self
@@ -191,7 +224,7 @@ impl YubiKeyHandler {
             return Err(SignerError::KeyAlreadyExists);
         }
         if self.verbose {
-            println!("Generating Key on {:?}", slot);
+            println!("Generating Key on {}", slot_description(slot));
         }
 
         let key_info =
