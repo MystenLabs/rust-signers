@@ -8,6 +8,7 @@ use std::io::Cursor;
 mod ledger_manager;
 use ledger_manager::LedgerManager;
 use ledger_signer::{ledger, path::get_derivation_path};
+use signer_types::CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE;
 
 // first key in the hardcoded seed "abandon abandon abandon ..." given to the speculos emulator
 fn first_key() -> serde_json::Value {
@@ -47,11 +48,14 @@ async fn test_cli_create_key_not_supported() {
     assert!(result.is_err());
     let error = result.unwrap_err().0;
     let rpc_error: signer_types::JsonRpcErrorObject = (&error).into();
-    assert!(matches!(error, AppError::UnsupportedMethod(_)));
-    assert_eq!(rpc_error.code, -32601);
+    assert!(matches!(error, AppError::CreateKeyUnsupportedUseExisting));
+    assert_eq!(
+        rpc_error.code,
+        CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE
+    );
     assert_eq!(
         rpc_error.message,
-        "create_key is not supported by ledger-signer"
+        "create_key is not supported; use an existing key"
     );
 }
 

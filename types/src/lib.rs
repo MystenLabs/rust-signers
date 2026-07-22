@@ -2,6 +2,9 @@ use bip39::Mnemonic;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// The signer cannot create new keys, but the client can fall back to using existing keys.
+pub const CREATE_KEY_UNSUPPORTED_USE_EXISTING_ERROR_CODE: i64 = -32013;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,

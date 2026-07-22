@@ -115,7 +115,7 @@ pub async fn handle_request(
     ledger_conn_type: ledger::ConnectionType,
 ) -> AppResult<Value> {
     match method {
-        "create_key" => Err(AppError::UnsupportedMethod("create_key".to_string())),
+        "create_key" => Err(AppError::CreateKeyUnsupportedUseExisting),
         "sign_hashed" => Err(AppError::UnsupportedMethod("sign_hashed".to_string())),
         "sign" => {
             let mut ledger_conn = ledger::get_connection(ledger_conn_type).await?;
