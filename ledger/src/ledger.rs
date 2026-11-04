@@ -31,7 +31,11 @@ pub async fn get_connection(
     // Give the provider worker thread time to initialize
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let devices = provider.list(Filters::Any).await?;
+    // Try USB first to skip the slow BLE scan; fall back to all transports.
+    let mut devices = provider.list(Filters::Hid).await?;
+    if devices.is_empty() {
+        devices = provider.list(Filters::Any).await?;
+    }
 
     if devices.is_empty() {
         return Err(AppError::DeviceNotFound);
